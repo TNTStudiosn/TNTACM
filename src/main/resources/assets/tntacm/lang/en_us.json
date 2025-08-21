@@ -1,5 +1,6 @@
 {
   "block.tntacm.universo": "Universo",
   "itemgroup.tntacm": "ACM",
-  "biome.tntacm.space_biome": "Deep Space"
+  "biome.tntacm.space_biome": "Deep Space",
+  "entity.tntacm.nebula": "Nebula (Nave de caza ACM)"
 }

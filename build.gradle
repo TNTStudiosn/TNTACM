@@ -23,11 +23,20 @@ loom {
 
 
 repositories {
-    // Add repositories to retrieve artifacts from in here.
-    // You should only use this when depending on other mods because
-    // Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-    // See https://docs.gradle.org/current/userguide/declaring_repositories.html
-    // for more information about repositories.
+    maven {
+        url "https://cursemaven.com"
+    }
+    maven {
+        url = "https://api.modrinth.com/maven"
+    }
+    maven {
+        name = 'GeckoLib'
+        url 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content {
+            includeGroupByRegex("software\\.bernie.*")
+            includeGroup("com.eliotlash.mclib")
+        }
+    }
 }
 
 dependencies {
@@ -37,6 +46,11 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    modImplementation "curse.maven:geckolib-388172:6789483"
+    modImplementation "maven.modrinth:gravity-api-fork:v1.1.2-mc1.20.1"
+    modImplementation "curse.maven:cloth-config-348521:5729104"
+    implementation("com.eliotlash.mclib:mclib:20")
 }
 
 processResources {

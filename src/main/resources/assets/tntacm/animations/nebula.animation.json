@@ -1,0 +1,92 @@
+{
+	"format_version": "1.8.0",
+	"animations": {
+		"animation.nebula.quieto": {
+			"loop": true,
+			"animation_length": 1,
+			"bones": {
+				"nave": {
+					"position": {
+						"vector": [0, 0, 0]
+					}
+				}
+			}
+		},
+		"animation.nebula.flotar": {
+			"loop": true,
+			"animation_length": 3,
+			"bones": {
+				"nave": {
+					"position": {
+						"0.0": {
+							"vector": [0, 0, 0]
+						},
+						"0.0417": [0, 0.04798, 0],
+						"0.5833": [0, 1.1433, 0],
+						"1.125": [0, 2.29806, 0],
+						"1.4167": [0, 2.88141, 0],
+						"1.4583": [0, 2.95202, 0],
+						"1.5": {
+							"pre": {
+								"vector": [0, 3, 0]
+							},
+							"post": {
+								"vector": [0, 3, 0]
+							},
+							"lerp_mode": "catmullrom"
+						},
+						"3.0": {
+							"post": {
+								"vector": [0, 0, 0]
+							},
+							"lerp_mode": "catmullrom"
+						}
+					}
+				}
+			}
+		},
+		"animation.nebula.abrir": {
+			"animation_length": 1.5,
+			"bones": {
+				"escotilla": {
+					"rotation": {
+						"0.0": {
+							"post": {
+								"vector": [0, 0, 0]
+							},
+							"lerp_mode": "catmullrom"
+						},
+						"1.5": {
+							"post": {
+								"vector": [-50, 0, 0]
+							},
+							"lerp_mode": "catmullrom"
+						}
+					}
+				}
+			}
+		},
+		"animation.nebula.cerrar": {
+			"animation_length": 1.5,
+			"bones": {
+				"escotilla": {
+					"rotation": {
+						"0.0": {
+							"post": {
+								"vector": [-50, 0, 0]
+							},
+							"lerp_mode": "catmullrom"
+						},
+						"1.5": {
+							"post": {
+								"vector": [0, 0, 0]
+							},
+							"lerp_mode": "catmullrom"
+						}
+					}
+				}
+			}
+		}
+	},
+	"geckolib_format_version": 2
+}

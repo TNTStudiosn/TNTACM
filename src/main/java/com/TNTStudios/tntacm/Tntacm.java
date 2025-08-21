@@ -2,7 +2,8 @@
 package com.TNTStudios.tntacm;
 
 import com.TNTStudios.tntacm.block.ModBlocks;
-import com.TNTStudios.tntacm.dimension.ModDimensions; // <-- Importa la nueva clase
+import com.TNTStudios.tntacm.dimension.ModDimensions;
+import com.TNTStudios.tntacm.entity.ModEntities; // <-- ¡Importa la nueva clase!
 import com.TNTStudios.tntacm.item.ModItemGroups;
 import net.fabricmc.api.ModInitializer;
 import org.slf4j.Logger;
@@ -17,5 +18,6 @@ public class Tntacm implements ModInitializer {
         ModBlocks.registerModBlocks();
         ModItemGroups.registerItemGroups();
         ModDimensions.register();
+        ModEntities.registerModEntities();
     }
 }
