@@ -1,0 +1,10 @@
+{
+  "type": "tntacm:space_type",
+  "generator": {
+    "type": "tntacm:space",
+    "biome_source": {
+      "type": "minecraft:fixed",
+      "biome": "tntacm:space_biome"
+    }
+  }
+}
