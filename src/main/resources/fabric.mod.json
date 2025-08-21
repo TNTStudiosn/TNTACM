@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "tntacm",
+  "version": "${version}",
+  "name": "TNTACM",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/tntacm/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "com.TNTStudios.tntacm.client.TntacmClient"
+    ],
+    "main": [
+      "com.TNTStudios.tntacm.Tntacm"
+    ]
+  },
+  "mixins": [
+    "tntacm.mixins.json",
+    {
+      "config": "tntacm.client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
