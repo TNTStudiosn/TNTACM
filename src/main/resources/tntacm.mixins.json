@@ -4,6 +4,7 @@
   "package": "com.TNTStudios.tntacm.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "LivingEntityAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

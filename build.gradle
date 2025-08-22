@@ -48,8 +48,6 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     modImplementation "curse.maven:geckolib-388172:6789483"
-    modImplementation "maven.modrinth:gravity-api-fork:v1.1.2-mc1.20.1"
-    modImplementation "curse.maven:cloth-config-348521:5729104"
     implementation("com.eliotlash.mclib:mclib:20")
 }
 
