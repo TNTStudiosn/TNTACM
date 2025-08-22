@@ -60,7 +60,7 @@ public abstract class CameraMixin {
 
         // ===== POSICIÓN BASE =====
         // Offset hacia adelante de la nave (como cabina/cockpit), usando orientación de la nave.
-        final double cameraDistanceOffset = 5.5; // ajustable
+        final double cameraDistanceOffset = 4.0; // ajustable
         Vec3d shipPos = nebula.getLerpedPos(tickDelta);
         Vec3d shipForward = nebula.getRotationVec(tickDelta);
 

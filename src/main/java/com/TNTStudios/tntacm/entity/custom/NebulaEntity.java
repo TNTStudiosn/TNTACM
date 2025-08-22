@@ -44,7 +44,7 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     // Límites y velocidades de rotación (en grados/tick @20TPS)
     private static final float MIN_PITCH = -30.0f;  // arriba
     private static final float MAX_PITCH =  50.0f;  // abajo
-    private static final float MAX_YAW_SPEED_DEG = 6.0f; // 3.0f era muy lento y generaba sensación de “lag”
+    private static final float MAX_YAW_SPEED_DEG = 2.8f; // velocidad camara
     // =========================================================
 
     public NebulaEntity(EntityType<? extends LivingEntity> entityType, World world) {
