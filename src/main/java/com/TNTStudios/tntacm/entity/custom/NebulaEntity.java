@@ -17,6 +17,7 @@ import net.minecraft.util.ActionResult;
 import net.minecraft.util.Arm;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
@@ -34,18 +35,39 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
 
     private final AnimatableInstanceCache cache = new SingletonAnimatableInstanceCache(this);
 
-    // ==================== MODELO DE VUELO ====================
-    private static final double FORWARD_THRUST   = 0.08D;
-    private static final double STRAFE_THRUST    = 0.06D;
-    private static final double VERTICAL_THRUST  = 0.07D;
-    private static final double MAX_SPEED        = 1.8D;
-    private static final double DAMPENING_FACTOR = 0.975D;
+    // ===== Dimensiones del modelo (referencia para el AABB rotatorio) =====
+    private static final float ENTITY_WIDTH  = 2.5f;
+    private static final float ENTITY_LENGTH = 9.0f;
+    private static final float ENTITY_HEIGHT = 2.5f;
 
-    // Límites y velocidades de rotación (en grados/tick @20TPS)
-    private static final float MIN_PITCH = -30.0f;  // arriba
-    private static final float MAX_PITCH =  50.0f;  // abajo
-    private static final float MAX_YAW_SPEED_DEG = 2.8f; // velocidad camara
-    // =========================================================
+    // ===== Modelo de vuelo (thrusts y damping) =====
+    private static final double FORWARD_THRUST   = 0.08D;   // empuje W/S
+    private static final double STRAFE_THRUST    = 0.06D;   // empuje A/D (sin girar la nave)
+    private static final double VERTICAL_THRUST  = 0.07D;   // empuje vertical (Espacio/Shift)
+    private static final double MAX_SPEED        = 1.8D;    // límite de velocidad lineal
+    private static final double DAMPENING_FACTOR = 0.975D;  // amortiguación inercial
+
+    // ===== Límites y velocidades de rotación =====
+    // Pitch limitado para no romper cámara y UI
+    private static final float MIN_PITCH = -20.0f;     // arriba
+    private static final float MAX_PITCH =  50.0f;     // abajo
+
+    // Velocidad máxima por tick (20 TPS) — límite duro
+    private static final float MAX_YAW_SPEED_DEG   = 3.0f;
+    private static final float MAX_PITCH_SPEED_DEG = 3.0f;
+
+    // Control PD (suavidad de seguimiento hacia la cámara)
+    // ROT_P: qué tan fuerte acelero hacia el objetivo (ángulo de la cámara)
+    // ROT_DAMP: amortiguación de la velocidad acumulada (0..1)
+    private static final float ROT_P    = 0.18f;
+    private static final float ROT_DAMP = 0.80f;
+
+    // Deadzone angular para evitar jitter cuando la cámara casi coincide
+    private static final float ANGLE_DEADZONE_DEG = 0.15f;
+
+    // Estado interno de rotación (velocidades angulares suavizadas)
+    private float yawVelDeg   = 0.0f;
+    private float pitchVelDeg = 0.0f;
 
     public NebulaEntity(EntityType<? extends LivingEntity> entityType, World world) {
         super(entityType, world);
@@ -65,63 +87,84 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
         super.tick();
 
         if (this.getControllingPassenger() instanceof PlayerEntity pilot) {
-            // 1) Leo intención del jugador
-            final float desiredPitch = MathHelper.clamp(pilot.getPitch(), MIN_PITCH, MAX_PITCH);
+            // 1:1 — la nave copia la cámara en el mismo tick
+            final float newPitch = MathHelper.clamp(pilot.getPitch(), MIN_PITCH, MAX_PITCH);
+            final float newYaw   = pilot.getYaw();
 
-            // 2) Calculo delta yaw hacia el objetivo del jugador (envuelvo para evitar saltos ±180)
-            final float currentYaw = this.getYaw();
-            final float yawDelta    = MathHelper.wrapDegrees(pilot.getYaw() - currentYaw);
+            // (opcional) limpia estados del controlador anterior
+            this.yawVelDeg = 0f;
+            this.pitchVelDeg = 0f;
 
-            // 3) Limito velocidad de giro por tick para que la nave tenga inercia horizontal
-            final float clampedYawDelta = MathHelper.clamp(yawDelta, -MAX_YAW_SPEED_DEG, MAX_YAW_SPEED_DEG);
-            final float newYaw = currentYaw + clampedYawDelta;
-
-            // 4) Mantengo cámara/jugador acoplados a la nave (evito que la cámara “se me vaya” delante)
-            pilot.setYaw(newYaw);
-            pilot.setPitch(desiredPitch);
-
-            // 5) Aplico la rotación a la nave…
+            // Aplica a la nave (no toco la cámara del jugador)
             this.setYaw(newYaw);
-            this.setPitch(desiredPitch);
+            this.setPitch(newPitch);
             this.setBodyYaw(newYaw);
             this.setHeadYaw(newYaw);
 
-            // 6) …y **en cliente** sincronizo prev* = current* para que el render NO interpole este frame.
-            //    Esto elimina el efecto de “el modelo va un poquito tarde” al girar con teclado + ratón.
+            // Evita interpolación visual ese frame
             if (this.getWorld().isClient()) {
                 this.prevYaw = newYaw;
-                this.prevPitch = desiredPitch;
+                this.prevPitch = newPitch;
                 this.prevBodyYaw = newYaw;
                 this.prevHeadYaw = newYaw;
             }
+        } else {
+            // Sin piloto, amortiguo un poco por si quedó algo de inercia
+            this.yawVelDeg   *= 0.90f;
+            this.pitchVelDeg *= 0.90f;
         }
 
-        // Freno cuando voy suelto, nada raro aquí.
+        // Freno suave cuando no hay input (o incluso con input, simulando inercia)
         if (!this.hasPassengers()) {
             this.setVelocity(this.getVelocity().multiply(DAMPENING_FACTOR));
         }
+    }
+
+    // AABB rotatorio en función del yaw para colisiones coherentes
+    @Override
+    protected Box calculateBoundingBox() {
+        double x = this.getX();
+        double y = this.getY();
+        double z = this.getZ();
+
+        float yawRad = this.getYaw() * (MathHelper.PI / 180.0F);
+        float cos = Math.abs(MathHelper.cos(yawRad));
+        float sin = Math.abs(MathHelper.sin(yawRad));
+
+        double halfWidth  = (ENTITY_WIDTH * cos + ENTITY_LENGTH * sin) / 2.0;
+        double halfLength = (ENTITY_WIDTH * sin + ENTITY_LENGTH * cos) / 2.0;
+
+        double minY = y;
+        double maxY = y + ENTITY_HEIGHT;
+
+        return new Box(
+                x - halfWidth, minY, z - halfLength,
+                x + halfWidth, maxY, z + halfLength
+        );
     }
 
     // ==================== MOVIMIENTO ====================
     @Override
     public void travel(Vec3d movementInput) {
         if (this.getControllingPassenger() instanceof PlayerEntity pilot) {
-            // Notas: mantengo mis direcciones derivadas de la rotación actual,
-            // y compongo empuje con una leve amortiguación para “nave espacial”
+            // Mantengo A/D como strafe puro (no rotan la nave)
             float forwardInput  = pilot.forwardSpeed;   // W/S
             float sidewaysInput = pilot.sidewaysSpeed;  // A/D
             boolean ascend  = ((LivingEntityAccessor) pilot).isJumpingInput(); // Espacio
             boolean descend = pilot.isSneaking();                              // Shift
 
-            Vec3d forwardDir = this.getRotationVector();
-            Vec3d upDir = new Vec3d(0, 1, 0);
-            Vec3d sideDir = forwardDir.crossProduct(upDir).normalize();
+            // Dirección hacia donde apunta la nave (influida por la cámara)
+            Vec3d forwardDir = this.getRotationVector();   // incluye pitch -> W sube si apunto arriba
+            Vec3d upDir      = new Vec3d(0, 1, 0);
+            Vec3d sideDir    = forwardDir.crossProduct(upDir).normalize(); // horizontal, ortogonal a forward
 
             Vec3d totalThrust = Vec3d.ZERO;
+
             if (forwardInput != 0.0F) {
                 totalThrust = totalThrust.add(forwardDir.multiply(forwardInput * FORWARD_THRUST));
             }
             if (sidewaysInput != 0.0F) {
+                // strafe puro a izquierda/derecha sin girar
                 totalThrust = totalThrust.add(sideDir.multiply(-sidewaysInput * STRAFE_THRUST));
             }
             if (ascend) {
@@ -131,11 +174,13 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
                 totalThrust = totalThrust.add(upDir.multiply(-VERTICAL_THRUST));
             }
 
+            // Aplico empuje y capeo velocidad máxima
             this.addVelocity(totalThrust);
             if (this.getVelocity().lengthSquared() > MAX_SPEED * MAX_SPEED) {
                 this.setVelocity(this.getVelocity().normalize().multiply(MAX_SPEED));
             }
 
+            // Amortiguación inercial suave
             this.setVelocity(this.getVelocity().multiply(DAMPENING_FACTOR));
             this.move(MovementType.SELF, this.getVelocity());
             return;
@@ -184,16 +229,24 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
         return null;
     }
 
-    // ==================== REQUERIDOS / GECKOLIB ====================
+    // ==================== Sonidos / Comportamiento base ====================
     @Override public boolean damage(DamageSource source, float amount) { return false; }
     @Override public boolean isInvulnerableTo(DamageSource source) { return source.isSourceCreativePlayer(); }
     @Override public boolean isPushable() { return false; }
     @Override public void fall(double height, boolean onGround, BlockState state, BlockPos pos) { }
+
+    // Anulo por completo el sonido de pasos al tocar bloques
+    @Override
+    protected void playStepSound(BlockPos pos, BlockState state) {
+        // silencio total
+    }
+
     @Override public Iterable<ItemStack> getArmorItems() { return ImmutableList.of(); }
     @Override public ItemStack getEquippedStack(EquipmentSlot slot) { return ItemStack.EMPTY; }
     @Override public void equipStack(EquipmentSlot slot, ItemStack stack) { }
     @Override public Arm getMainArm() { return Arm.RIGHT; }
 
+    // ==================== GECKOLIB ====================
     @Override
     public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
         controllers.add(new AnimationController<>(this, "controller", 0, this::predicate));

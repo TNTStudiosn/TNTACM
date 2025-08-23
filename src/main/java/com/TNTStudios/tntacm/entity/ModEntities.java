@@ -19,7 +19,7 @@ public class ModEntities {
             Registries.ENTITY_TYPE,
             new Identifier(Tntacm.MOD_ID, "nebula"),
             FabricEntityTypeBuilder.create(SpawnGroup.MISC, NebulaEntity::new)
-                    .dimensions(EntityDimensions.fixed(5f, 2.5f))
+                    .dimensions(EntityDimensions.fixed(9.0f, 2.5f))
                     .build()
     );
 

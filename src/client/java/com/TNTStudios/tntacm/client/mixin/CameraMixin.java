@@ -6,9 +6,14 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.Camera;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
+import net.minecraft.util.math.Direction;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.BlockView;
+import net.minecraft.world.RaycastContext;
+import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -29,12 +34,13 @@ public abstract class CameraMixin {
     @Unique private float tntacm$sPitch = 0f;
     @Unique private Vec3d tntacm$sPos = Vec3d.ZERO;
 
-    // -- Ganancias del filtro (ajústalas a tu gusto):
-    //    α rotación: qué tan rápido sigue el objetivo (0..1). 0.6 = suave sin lag notable.
+    // -- Ganancias del filtro (ajústalas a tu gusto)
     @Unique private static final float tntacm$ROT_ALPHA_YAW = 0.60f;
     @Unique private static final float tntacm$ROT_ALPHA_PITCH = 0.55f;
-    //    α posición: lerp ligero para matar micro-jitter.
     @Unique private static final double tntacm$POS_ALPHA = 0.65;
+
+    // -- Padding para no pegar la cámara a la cara del bloque
+    @Unique private static final double tntacm$CLIP_PADDING = 0.08; // 8cm aprox.
 
     @Inject(method = "update", at = @At("TAIL"))
     private void tntacm$hijackCameraUpdate(BlockView area,
@@ -59,17 +65,23 @@ public abstract class CameraMixin {
         }
 
         // ===== POSICIÓN BASE =====
-        // Offset hacia adelante de la nave (como cabina/cockpit), usando orientación de la nave.
-        final double cameraDistanceOffset = 4.0; // ajustable
+        // Offset hacia adelante de la nave (cabina/cockpit), usando orientación de la nave.
+        final double cameraDistanceOffset = 5.0; // ajustable
         Vec3d shipPos = nebula.getLerpedPos(tickDelta);
         Vec3d shipForward = nebula.getRotationVec(tickDelta);
 
         // Punto base delante de la nave
         Vec3d targetPos = shipPos.add(shipForward.multiply(cameraDistanceOffset));
-        // Altura: uso altura del asiento/montura para que no "respire" con eyeHeight vanilla
+        // Altura: uso altura de montura para estabilidad
         targetPos = new Vec3d(targetPos.x, shipPos.y + nebula.getMountedHeightOffset(), targetPos.z);
 
-        // Suavizado de posición (quita vibración cuando la orientación cambia fuerte)
+        // === CLIP CONTRA BLOQUES (para no ver a través) ===
+        // Tiro un raycast desde la cabina al target adelantado; si pego, acerco la cámara al punto de impacto con un margen.
+        World world = nebula.getWorld();
+        Vec3d originPos = new Vec3d(shipPos.x, shipPos.y + nebula.getMountedHeightOffset(), shipPos.z);
+        targetPos = tntacm$clipCamera(world, nebula, originPos, targetPos, tntacm$CLIP_PADDING);
+
+        // Suavizado de posición (quita micro-jitter al cambiar fuerte la orientación)
         if (!tntacm$camInit) {
             tntacm$sPos = targetPos;
         } else {
@@ -82,11 +94,10 @@ public abstract class CameraMixin {
         this.setPos(tntacm$sPos.x, tntacm$sPos.y, tntacm$sPos.z);
 
         // ===== ROTACIÓN SUAVIZADA =====
-        // La rotación de cámara sale del jugador (entrada del ratón) para que se sienta “1:1”.
         float targetYaw = player.getYaw(tickDelta);
         float targetPitch = player.getPitch(tickDelta);
 
-        // Inicialización del filtro la primera vez
+        // Inicializo el filtro la primera vez
         if (!tntacm$camInit) {
             tntacm$sYaw = targetYaw;
             tntacm$sPitch = targetPitch;
@@ -105,5 +116,34 @@ public abstract class CameraMixin {
 
         // Aplico rotación final
         this.setRotation(tntacm$sYaw, tntacm$sPitch);
+    }
+
+    /**
+     * Hago raycast entre 'from' y 'to' y si pego algún bloque visualmente sólido,
+     * coloco la cámara justo antes del impacto con un pequeño padding.
+     */
+    @Unique
+    private Vec3d tntacm$clipCamera(World world, Entity source, Vec3d from, Vec3d to, double padding) {
+        // Uso ShapeType.VISUAL para respetar la silueta visible (vidrio, etc.) y evitar ver a través.
+        RaycastContext ctx = new RaycastContext(
+                from, to,
+                RaycastContext.ShapeType.VISUAL,
+                RaycastContext.FluidHandling.NONE,
+                source
+        );
+
+        BlockHitResult hit = world.raycast(ctx);
+        if (hit.getType() == HitResult.Type.MISS) {
+            // Sin obstáculos: dejo el target original
+            return to;
+        }
+
+        // Hay impacto: me quedo ligeramente frente a la cara golpeada (hacia afuera del bloque).
+        Vec3d hitPos = hit.getPos();
+        Direction face = hit.getSide();
+        var v = face.getUnitVector();
+        Vec3d outwardNormal = new Vec3d(v.x(), v.y(), v.z());
+        return hitPos.add(outwardNormal.multiply(padding));
+
     }
 }
