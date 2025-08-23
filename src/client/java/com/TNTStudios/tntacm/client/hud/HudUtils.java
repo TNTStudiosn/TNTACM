@@ -50,6 +50,26 @@ public final class HudUtils {
     //endregion
 
     //region Drawing Primitives
+    // NUEVO: Función para dibujar un cheurón (forma de V o flecha)
+    public static void drawChevron(DrawContext ctx, int x, int y, int size, int thickness, int color, float angle) {
+        float cos = (float)Math.cos(angle);
+        float sin = (float)Math.sin(angle);
+
+        float tipX = x + cos * size * 0.5f;
+        float tipY = y + sin * size * 0.5f;
+
+        float wingAngle = (float)Math.PI / 4f; // 45 grados
+
+        float wing1X = x - (float)Math.cos(angle - wingAngle) * size;
+        float wing1Y = y - (float)Math.sin(angle - wingAngle) * size;
+
+        float wing2X = x - (float)Math.cos(angle + wingAngle) * size;
+        float wing2Y = y - (float)Math.sin(angle + wingAngle) * size;
+
+        thickLine(ctx, (int)tipX, (int)tipY, (int)wing1X, (int)wing1Y, thickness, color);
+        thickLine(ctx, (int)tipX, (int)tipY, (int)wing2X, (int)wing2Y, thickness, color);
+    }
+
     public static void drawCircle(DrawContext ctx, int cx, int cy, int radius, int segments, int argb) {
         if (radius <= 0) return;
         Matrix4f m = ctx.getMatrices().peek().getPositionMatrix();
@@ -115,11 +135,17 @@ public final class HudUtils {
             Matrix4f positionMatrix = ctx.getMatrices().peek().getPositionMatrix();
             Tessellator tessellator = Tessellator.getInstance();
             BufferBuilder buffer = tessellator.getBuffer();
-            // CORRECTION: Use getPositionColorProgram for drawing simple colored lines.
+
+            // Descompongo ARGB a RGBA para evitar rarezas
+            int a = (color >>> 24) & 0xFF;
+            int r = (color >>> 16) & 0xFF;
+            int g = (color >>> 8)  & 0xFF;
+            int b = (color)        & 0xFF;
+
             RenderSystem.setShader(GameRenderer::getPositionColorProgram);
             buffer.begin(VertexFormat.DrawMode.LINES, VertexFormats.POSITION_COLOR);
-            buffer.vertex(positionMatrix, (float)x1, (float)y1, 0.0F).color(color).next();
-            buffer.vertex(positionMatrix, (float)x2, (float)y2, 0.0F).color(color).next();
+            buffer.vertex(positionMatrix, (float)x1, (float)y1, 0.0F).color(r, g, b, a).next();
+            buffer.vertex(positionMatrix, (float)x2, (float)y2, 0.0F).color(r, g, b, a).next();
             tessellator.draw();
             return;
         }
@@ -168,5 +194,7 @@ public final class HudUtils {
         RenderSystem.disableBlend();
     }
     //endregion
+
+
 }
 //endregion
