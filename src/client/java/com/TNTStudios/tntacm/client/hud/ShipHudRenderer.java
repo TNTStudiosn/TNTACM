@@ -16,7 +16,7 @@ public class ShipHudRenderer {
     private static long lastDamageTime = 0;
     private static final long DAMAGE_FLASH_DURATION = 300L; // ms
 
-    // Suavizado de velocidad para lectura estable
+    // Suavizado de velocidad para lectura estable (visual)
     private static float displayedSpeedBps = 0f;
     //endregion
 
@@ -24,13 +24,13 @@ public class ShipHudRenderer {
     private static final int COLOR_PRIMARY_ACCENT   = 0xFF33FFFF;  // Cyan brillante
     private static final int COLOR_SECONDARY_ACCENT = 0x9033FFFF;  // Cyan 56% transparente
     private static final int COLOR_BACKGROUND       = 0x80000000;  // Negro 50% transparente
-    private static final int COLOR_HEALTH_HIGH      = 0xFF00FF00;  // Verde
+    private static final int COLOR_HEALTH_HIGH      = 0xFF00C850;  // Verde tecnológico
     private static final int COLOR_HEALTH_MID       = 0xFFFFFF00;  // Amarillo
     private static final int COLOR_HEALTH_LOW       = 0xFFFF0000;  // Rojo
     private static final int COLOR_WHITE            = 0xFFFFFFFF;
     private static final int COLOR_RED_FLASH        = 0x55FF0000;
 
-    // Escala de lectura "realista" (solo visual). 6x ~ números de nave sin tocar física.
+    // Escala "de nave" (solo visual). Mantengo 6x.
     private static final float SPEED_DISPLAY_SCALE = 6.0f;
     private static final float SPEED_SMOOTHING     = 0.15f; // lerp por frame
     //endregion
@@ -51,10 +51,13 @@ public class ShipHudRenderer {
         final int width = context.getScaledWindowWidth();
         final int height = context.getScaledWindowHeight();
 
-        drawVignette(context, width, height);
-        drawCrosshair(context, width, height, client.player.getPitch());
-        drawHealthIndicatorCompact(context, width, height, ship);
-        drawFlightData(context, width, height, ship, tickDelta); // velocidad + cinta espacial
+        // HUD
+        drawVignette(context, width, height);                 // Esquinas arriba y abajo
+        drawBrandingACM(context);                              // Placa ACM
+        drawCrosshair(context, width, height, client.player.getPitch()); // Ladder con números a ambos lados
+        drawHealthIndicatorMicro(context, width, height, ship);          // Indicador más pequeño + shimmer
+        drawSpeedReadout(context, width, height, ship);       // Solo velocidad (sin yaw)
+        drawSystemsPanel(context, width, height);             // Animaciones de "sistemas"
         drawDamageFlash(context, width, height);
 
         RenderSystem.disableBlend();
@@ -71,14 +74,14 @@ public class ShipHudRenderer {
         lastHealth = currentHealth;
 
         float targetHealthPercent = ship.getHealth() / ship.getMaxHealth();
-        // Interpolación suave para animación de vida
+        // Suavizo la barra para que no pegue saltos bruscos
         displayedHealthPercent = MathHelper.lerp(tickDelta * 0.15f, displayedHealthPercent, targetHealthPercent);
     }
     //endregion
 
     //region HUD Components
     private static void drawVignette(DrawContext context, int width, int height) {
-        // Soportes de esquina estilo cabina (ligeramente más sutiles)
+        // Soportes de esquina estilo cabina en las 4 esquinas
         int cornerSize = 18;
         int thickness = 2;
         // Superior-izquierda
@@ -87,6 +90,34 @@ public class ShipHudRenderer {
         // Superior-derecha
         context.fill(width - 5 - cornerSize, 5, width - 5, 5 + thickness, COLOR_SECONDARY_ACCENT);
         context.fill(width - 5 - thickness, 5, width - 5, 5 + cornerSize, COLOR_SECONDARY_ACCENT);
+        // Inferior-izquierda
+        context.fill(5, height - 5 - thickness, 5 + cornerSize, height - 5, COLOR_SECONDARY_ACCENT);
+        context.fill(5, height - 5 - cornerSize, 5 + thickness, height - 5, COLOR_SECONDARY_ACCENT);
+        // Inferior-derecha
+        context.fill(width - 5 - cornerSize, height - 5 - thickness, width - 5, height - 5, COLOR_SECONDARY_ACCENT);
+        context.fill(width - 5 - thickness, height - 5 - cornerSize, width - 5, height - 5, COLOR_SECONDARY_ACCENT);
+    }
+
+    // Placa de branding "ACM" (dueña de la nave)
+    private static void drawBrandingACM(DrawContext context) {
+        final var tr = MinecraftClient.getInstance().textRenderer;
+        int x = 10, y = 8;
+        int w = 40, h = 12;
+
+        // Borde fino y fondo translúcido
+        context.fill(x - 1, y - 1, x + w + 1, y + h + 1, COLOR_PRIMARY_ACCENT);
+        context.fill(x, y, x + w, y + h, COLOR_BACKGROUND);
+
+        // Etiqueta ACM centrada
+        String brand = "ACM";
+        int tx = x + (w - tr.getWidth(brand)) / 2;
+        int ty = y + 2;
+        context.drawTextWithShadow(tr, brand, tx, ty, COLOR_WHITE);
+
+        // Línea inferior dinámica tipo "actividad"
+        long t = System.currentTimeMillis() % 1000L;
+        int seg = (int) (w * (t / 1000f));
+        context.fill(x, y + h, x + seg, y + h + 1, COLOR_PRIMARY_ACCENT);
     }
 
     private static void drawCrosshair(DrawContext context, int width, int height, float pitch) {
@@ -105,43 +136,41 @@ public class ShipHudRenderer {
         context.fill(centerX - pulseGap - 1, centerY, centerX - pulseGap, centerY + 1, COLOR_WHITE);
         context.fill(centerX + pulseGap, centerY, centerX + pulseGap + 1, centerY + 1, COLOR_WHITE);
 
-        // Escalera de cabeceo (Pitch Ladder) con números en ambos lados
+        // Escalera de cabeceo (Pitch Ladder) con números a ambos lados
         context.getMatrices().push();
         context.getMatrices().translate(centerX, centerY, 0);
 
         int ladderWidth = 80;
         for (int p = -90; p <= 90; p += 10) {
-            if (p == 0) continue; // no dibujar 0
-            float yOffset = (p - pitch) * -2.5f; // invertido para subir/ bajar
+            if (p == 0) continue; // omito 0 para mantener limpio el centro
+            float yOffset = (p - pitch) * -2.5f; // invertido para coherencia visual
             if (Math.abs(yOffset) < 60) {
                 // marcas cortas a izquierda y derecha
                 context.fill(-ladderWidth / 2, (int)yOffset, -ladderWidth / 2 + 15, (int)yOffset + 1, COLOR_SECONDARY_ACCENT);
                 context.fill(ladderWidth / 2 - 15, (int)yOffset, ladderWidth / 2, (int)yOffset + 1, COLOR_SECONDARY_ACCENT);
 
-                // etiquetas a ambos lados (antes solo izquierda)
+                // etiquetas a ambos lados
                 var tr = MinecraftClient.getInstance().textRenderer;
                 String label = String.valueOf(p);
-                // izquierda
                 context.drawText(tr, label, -ladderWidth / 2 - 20, (int)yOffset - 4, COLOR_WHITE, true);
-                // derecha
-                context.drawText(tr, label, ladderWidth / 2 + 6, (int)yOffset - 4, COLOR_WHITE, true);
+                context.drawText(tr, label,  ladderWidth / 2 + 6,  (int)yOffset - 4, COLOR_WHITE, true);
             }
         }
         context.getMatrices().pop();
     }
 
-    // Indicador de estructura compacto y moderno
-    private static void drawHealthIndicatorCompact(DrawContext context, int width, int height, NebulaEntity ship) {
+    // Indicador de estructura aún más pequeño, con shimmer y microticks
+    private static void drawHealthIndicatorMicro(DrawContext context, int width, int height, NebulaEntity ship) {
         final var tr = MinecraftClient.getInstance().textRenderer;
 
-        // Cápsula mini centrada, más pequeña que antes
-        final int barWidth = 140;
-        final int barHeight = 8;
+        // Cápsula micro centrada
+        final int barWidth = 110;  // más pequeño
+        final int barHeight = 6;   // más delgado
         final int x = (width - barWidth) / 2;
-        final int y = height - 30;
+        final int y = height - 26;
 
-        // Título pequeño
-        context.drawTextWithShadow(tr, "ESTRUCTURA", x, y - 11, COLOR_WHITE);
+        // Título compacto
+        context.drawTextWithShadow(tr, "ESTRUCTURA", x, y - 10, COLOR_WHITE);
 
         // Borde fino
         context.fill(x - 1, y - 1, x + barWidth + 1, y + barHeight + 1, COLOR_PRIMARY_ACCENT);
@@ -153,13 +182,28 @@ public class ShipHudRenderer {
         final int healthColor = getHealthColor(displayedHealthPercent);
         context.fill(x, y, x + healthBarWidth, y + barHeight, healthColor);
 
-        // Línea de brillo superior (1 px) para look moderno
-        context.fill(x, y, x + healthBarWidth, y + 1, 0x80FFFFFF);
+        // Shimmer de “sistemas” barrido de izquierda a derecha
+        long t = System.currentTimeMillis() % 1200L;
+        int sweep = (int) (healthBarWidth * (t / 1200f));
+        int sweepWidth = Math.max(4, barWidth / 12);
+        int sx0 = x + Math.max(0, Math.min(healthBarWidth - 1, sweep));
+        int sx1 = Math.min(x + healthBarWidth, sx0 + sweepWidth);
+        if (sx1 > sx0) {
+            context.fill(sx0, y, sx1, y + barHeight, 0x40FFFFFF); // brillo suave
+            context.fill(sx0, y, sx1, y + 1, 0x80FFFFFF);         // línea superior
+        }
 
-        // Micro-ticks cada 10%
+        // Micro-ticks cada 10% (sutiles)
         for (int i = 1; i < 10; i++) {
             int tx = x + (barWidth * i) / 10;
             context.fill(tx, y + barHeight - 2, tx + 1, y + barHeight, COLOR_SECONDARY_ACCENT);
+        }
+
+        // Pulso si la vida es crítica (<25%)
+        if (displayedHealthPercent < 0.25f) {
+            float pulse = 0.5f + 0.5f * (float)Math.sin((System.currentTimeMillis() % 600L) / 600f * (float)(2 * Math.PI));
+            int alpha = (int)(80 * pulse) << 24;
+            context.fill(x - 2, y - 2, x + barWidth + 2, y + barHeight + 2, alpha | (COLOR_HEALTH_LOW & 0x00FFFFFF));
         }
 
         // Porcentaje
@@ -167,47 +211,63 @@ public class ShipHudRenderer {
         context.drawTextWithShadow(tr, percentText, x + barWidth + 6, y - 1, COLOR_WHITE);
     }
 
-    private static void drawFlightData(DrawContext context, int width, int height, NebulaEntity ship, float tickDelta) {
+    // Solo velocidad (sin yaw)
+    private static void drawSpeedReadout(DrawContext context, int width, int height, NebulaEntity ship) {
         final var tr = MinecraftClient.getInstance().textRenderer;
 
-        // --- Velocidad (suavizada) ---
         float rawBps = (float) (ship.getVelocity().length() * 20.0); // bloques/segundo ~ m/s
-        // Suavizado para evitar jitter en la lectura
+        // Suavizo para que la lectura no tiemble
         displayedSpeedBps = MathHelper.lerp(SPEED_SMOOTHING, displayedSpeedBps, rawBps);
         float simMS = displayedSpeedBps * SPEED_DISPLAY_SCALE; // solo visual
+
         String speedText = String.format("VEL: %.0f m/s", simMS);
         context.drawTextWithShadow(tr, speedText, 15, height - 35, COLOR_WHITE);
+    }
 
-        // --- Cinta espacial de orientación (Yaw en grados, sin puntos cardinales) ---
-        int tapeWidth = 160;
-        int tapeX = (width - tapeWidth) / 2;
-        int tapeY = 12;
+    // Panel de “sistemas funcionando”: barras animadas y secuencia de puntos
+    private static void drawSystemsPanel(DrawContext context, int width, int height) {
+        final var tr = MinecraftClient.getInstance().textRenderer;
 
-        // Fondo fino
-        context.fill(tapeX, tapeY, tapeX + tapeWidth, tapeY + 2, COLOR_BACKGROUND);
+        int panelW = 90, panelH = 32;
+        int x = width - panelW - 10;
+        int y = 8;
 
-        float yaw = MathHelper.wrapDegrees(ship.getYaw());
-        // Ticks cada 15°, etiquetas cada 45°
-        for (int i = -180; i <= 180; i += 15) {
-            float relativeAngle = MathHelper.wrapDegrees(i - yaw);
-            if (Math.abs(relativeAngle) <= 60) {
-                int tickX = tapeX + tapeWidth / 2 + (int) (relativeAngle * 1.3f);
-                boolean major = (i % 45 == 0);
-                // Tick
-                context.fill(tickX, tapeY - (major ? 3 : 1), tickX + 1, tapeY + (major ? 5 : 3), major ? COLOR_WHITE : COLOR_SECONDARY_ACCENT);
-                // Etiqueta en grados para ticks mayores (sin N/E/S/O)
-                if (major) {
-                    String label = (i == 0 ? "0°" : (i > 0 ? "+" + i + "°" : i + "°"));
-                    context.drawText(tr, label, tickX - tr.getWidth(label) / 2, tapeY + 7, COLOR_WHITE, true);
-                }
-            }
-        }
-        // Indicador central
-        context.fill(tapeX + tapeWidth / 2, tapeY - 5, tapeX + tapeWidth / 2 + 1, tapeY + 7, COLOR_PRIMARY_ACCENT);
+        // Marco y fondo
+        context.fill(x - 1, y - 1, x + panelW + 1, y + panelH + 1, COLOR_PRIMARY_ACCENT);
+        context.fill(x, y, x + panelW, y + panelH, COLOR_BACKGROUND);
 
-        // Lectura numérica principal de yaw a la derecha
-        String yawReadout = String.format("YAW %s%d°", (Math.round(yaw) > 0 ? "+" : (Math.round(yaw) < 0 ? "-" : "")), Math.abs(Math.round(yaw)));
-        context.drawTextWithShadow(tr, yawReadout, tapeX + tapeWidth + 8, tapeY + 4, COLOR_WHITE);
+        // Título
+        context.drawText(tr, "SISTEMAS", x + 6, y + 2, COLOR_WHITE, true);
+
+        // Barras animadas (tres subsistemas)
+        long now = System.currentTimeMillis();
+        drawAnimBar(context, x + 6, y + 12, panelW - 12, 4, now, 0);  // ENG
+        drawAnimBar(context, x + 6, y + 18, panelW - 12, 4, now, 180); // COM
+        drawAnimBar(context, x + 6, y + 24, panelW - 12, 4, now, 360); // LIFE
+
+        // Secuencia de puntos "online"
+        int dots = (int)((now / 250) % 4); // 0..3
+        String status = switch (dots) {
+            case 0 -> "●○○";
+            case 1 -> "●●○";
+            case 2 -> "●●●";
+            default -> "○○○";
+        };
+        context.drawText(tr, status, x + panelW - tr.getWidth(status) - 6, y + 2, COLOR_WHITE, true);
+    }
+
+    private static void drawAnimBar(DrawContext ctx, int x, int y, int w, int h, long now, int phaseDeg) {
+        // Hago un diente de sierra que recorre la barra para dar sensación de flujo de datos/energía
+        float phase = (phaseDeg / 360f);
+        float t = ((now % 1200L) / 1200f + phase) % 1f;
+        int runW = Math.max(6, w / 6);
+        int sx = x + (int)(t * (w - runW));
+        // Fondo tenue
+        ctx.fill(x, y, x + w, y + h, 0x40222222);
+        // “Carga” principal
+        ctx.fill(sx, y, sx + runW, y + h, COLOR_PRIMARY_ACCENT);
+        // Borde superior claro
+        ctx.fill(sx, y, sx + runW, y + 1, 0x80FFFFFF);
     }
 
     private static void drawDamageFlash(DrawContext context, int width, int height) {
