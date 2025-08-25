@@ -12,6 +12,9 @@ import net.minecraft.entity.*;
 import net.minecraft.entity.attribute.DefaultAttributeContainer;
 import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.damage.DamageSource;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -43,17 +46,24 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     private static final float ENTITY_HEIGHT = 2.5f;
 
     // ===== Modelo de vuelo (thrusts y damping) =====
-    private static final double FORWARD_THRUST = 0.08D;   // empuje W/S
-    private static final double STRAFE_THRUST = 0.06D;    // empuje A/D (sin girar la nave)
-    private static final double VERTICAL_THRUST = 0.07D;    // empuje vertical (Espacio/Shift)
-    private static final double MAX_SPEED = 1.8D;       // límite de velocidad lineal
-    private static final double DAMPENING_FACTOR = 0.975D;    // amortiguación inercial
+    private static final double FORWARD_THRUST = 0.08D;      // empuje W/S
+    private static final double STRAFE_THRUST = 0.06D;       // empuje A/D (sin girar la nave)
+    private static final double VERTICAL_THRUST = 0.07D;     // empuje vertical (Espacio/Shift)
+    private static final double MAX_SPEED = 1.8D;            // límite de velocidad lineal
+    private static final double DAMPENING_FACTOR = 0.975D;   // amortiguación inercial
 
     // ===== Armamento =====
     private int fireCooldown = 0;
-    // PERF: Cooldown bajo para alta cadencia, controlado en servidor.
-    private static final int MAX_FIRE_COOLDOWN = 1;
+    private static final int MAX_FIRE_COOLDOWN = 2; // Cadencia de disparo
     private static final double PROJECTILE_SPEED = 5.0D;
+    private static final int MAX_AMMO = 150; // Tamaño del cargador
+    private static final int RELOAD_TIME = 80; // 3 segundos (60 ticks)
+    private int reloadTimer = 0;
+
+    // DataTracker para sincronizar con el cliente (HUD)
+    private static final TrackedData<Integer> AMMO_COUNT = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.INTEGER);
+    private static final TrackedData<Boolean> IS_RELOADING = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
+
 
     // ===== Límites y velocidades de rotación =====
     private static final float MIN_PITCH = -20.0f;
@@ -67,18 +77,39 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
 
     public static DefaultAttributeContainer.Builder setAttributes() {
         return createLivingAttributes()
-                .add(EntityAttributes.GENERIC_MAX_HEALTH, 50.0D)
+                // Aumento la vida de la nave como solicitaste.
+                .add(EntityAttributes.GENERIC_MAX_HEALTH, 150.0D)
                 .add(EntityAttributes.GENERIC_KNOCKBACK_RESISTANCE, 1.0D);
     }
 
-    // ==================== TICK / ROTACIÓN ====================
+    @Override
+    protected void initDataTracker() {
+        super.initDataTracker();
+        // Inicializo los valores para la munición y el estado de recarga.
+        this.dataTracker.startTracking(AMMO_COUNT, MAX_AMMO);
+        this.dataTracker.startTracking(IS_RELOADING, false);
+    }
+
+    // ==================== TICK / LÓGICA DE RECARGA ====================
     @Override
     public void tick() {
         super.tick();
 
         if (!this.getWorld().isClient()) {
+            // Gestiono el cooldown de disparo entre cada proyectil de la ráfaga.
             if (this.fireCooldown > 0) {
                 this.fireCooldown--;
+            }
+
+            // Gestiono la lógica de recarga.
+            if (this.isReloading()) {
+                if (this.reloadTimer > 0) {
+                    this.reloadTimer--;
+                } else {
+                    // Termina la recarga: reseteo munición y estado.
+                    this.setAmmo(MAX_AMMO);
+                    this.setReloading(false);
+                }
             }
         }
 
@@ -172,26 +203,62 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
      * @param shootingDir La dirección de disparo, calculada desde la cámara del cliente.
      */
     public void fireProjectile(Vec3d shootingDir) {
-        if (this.getWorld().isClient() || this.fireCooldown > 0) return;
+        if (this.getWorld().isClient() || this.fireCooldown > 0 || this.isReloading()) return;
 
         Entity pilot = this.getControllingPassenger();
         if (!(pilot instanceof PlayerEntity player)) return;
 
+        int currentAmmo = this.getAmmo();
+        if (currentAmmo <= 0) return; // Doble chequeo por si acaso
+
         this.fireCooldown = MAX_FIRE_COOLDOWN;
+        this.setAmmo(currentAmmo - 1); // Reduzco la munición
+
         World world = this.getWorld();
 
-        // El proyectil nace en la posición de los "ojos" del jugador para que coincida con la retícula.
         Vec3d spawnPos = player.getCameraPosVec(1.0f);
-
         BlueLaserProjectileEntity projectile = new BlueLaserProjectileEntity(world, spawnPos.x, spawnPos.y, spawnPos.z);
         projectile.setOwner(pilot);
 
-        // La velocidad es la dirección de la cámara + la inercia de la nave.
         Vec3d projectileVelocity = shootingDir.multiply(PROJECTILE_SPEED).add(this.getVelocity());
         projectile.setVelocity(projectileVelocity);
-
         world.spawnEntity(projectile);
+
+        // Si se acaba la munición, inicio la recarga.
+        if (this.getAmmo() <= 0) {
+            this.setReloading(true);
+            this.reloadTimer = RELOAD_TIME;
+        }
     }
+    //endregion
+
+    //region Getters y Setters para DataTracker
+    public int getAmmo() {
+        return this.dataTracker.get(AMMO_COUNT);
+    }
+
+    public void setAmmo(int amount) {
+        this.dataTracker.set(AMMO_COUNT, amount);
+    }
+
+    public boolean isReloading() {
+        return this.dataTracker.get(IS_RELOADING);
+    }
+
+    public void setReloading(boolean reloading) {
+        this.dataTracker.set(IS_RELOADING, reloading);
+    }
+
+    // Métodos para el HUD
+    public int getMaxAmmo() {
+        return MAX_AMMO;
+    }
+
+    public float getReloadProgress() {
+        if (!isReloading()) return 0f;
+        return 1.0f - (float)this.reloadTimer / (float)RELOAD_TIME;
+    }
+
     //endregion
 
     // ==================== INTERACCIÓN / PASAJEROS ====================
@@ -233,7 +300,7 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     }
 
     // ==================== Sonidos / Comportamiento base ====================
-    @Override public boolean damage(DamageSource source, float amount) { return false; }
+    @Override public boolean damage(DamageSource source, float amount) { return super.damage(source, amount); } // Habilito el daño
     @Override public boolean isInvulnerableTo(DamageSource source) { return source.isSourceCreativePlayer(); }
     @Override public boolean isPushable() { return false; }
     @Override public void fall(double height, boolean onGround, BlockState state, BlockPos pos) { }

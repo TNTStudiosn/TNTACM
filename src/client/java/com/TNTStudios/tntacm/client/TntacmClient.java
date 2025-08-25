@@ -20,9 +20,6 @@ import net.minecraft.util.math.Vec3d;
 
 public class TntacmClient implements ClientModInitializer {
 
-    private int clientFireCooldown = 0;
-    // PERF: Cooldown idéntico al del servidor para predicción del cliente.
-    private static final int MAX_FIRE_COOLDOWN = 1;
     // FIX: La constante fue eliminada en 1.20.1, así que la defino aquí para mantener el código limpio.
     private static final float DEGREES_TO_RADIANS = (float) (Math.PI / 180.0);
 
@@ -66,13 +63,9 @@ public class TntacmClient implements ClientModInitializer {
                 return;
             }
 
-            if (this.clientFireCooldown > 0) {
-                this.clientFireCooldown--;
-            }
-
-            if (client.options.attackKey.isPressed() && this.clientFireCooldown <= 0) {
-                this.clientFireCooldown = MAX_FIRE_COOLDOWN;
-
+            // Simplifico la lógica: el cliente solo envía la intención de disparar.
+            // El servidor validará la munición y el cooldown.
+            if (client.options.attackKey.isPressed()) {
                 //region Packet
                 Camera camera = client.gameRenderer.getCamera();
                 // FIX: Llamar a nuestro propio método helper para evitar el problema de acceso `protected`.

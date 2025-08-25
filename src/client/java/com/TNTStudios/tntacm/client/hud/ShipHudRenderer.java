@@ -21,14 +21,14 @@ public class ShipHudRenderer {
     //endregion
 
     //region Constants
-    private static final int COLOR_PRIMARY_ACCENT   = 0xFF33FFFF;  // Cyan brillante
+    private static final int COLOR_PRIMARY_ACCENT     = 0xFF33FFFF;  // Cyan brillante
     private static final int COLOR_SECONDARY_ACCENT = 0x9033FFFF;  // Cyan 56% transparente
-    private static final int COLOR_BACKGROUND       = 0x80000000;  // Negro 50% transparente
-    private static final int COLOR_HEALTH_HIGH      = 0xFF00C850;  // Verde tecnológico
-    private static final int COLOR_HEALTH_MID       = 0xFFFFFF00;  // Amarillo
-    private static final int COLOR_HEALTH_LOW       = 0xFFFF0000;  // Rojo
-    private static final int COLOR_WHITE            = 0xFFFFFFFF;
-    private static final int COLOR_RED_FLASH        = 0x55FF0000;
+    private static final int COLOR_BACKGROUND         = 0x80000000;  // Negro 50% transparente
+    private static final int COLOR_HEALTH_HIGH        = 0xFF00C850;  // Verde tecnológico
+    private static final int COLOR_HEALTH_MID         = 0xFFFFFF00;  // Amarillo
+    private static final int COLOR_HEALTH_LOW         = 0xFFFF0000;  // Rojo
+    private static final int COLOR_WHITE              = 0xFFFFFFFF;
+    private static final int COLOR_RED_FLASH          = 0x55FF0000;
 
     // Escala "de nave" (solo visual). Mantengo 6x.
     private static final float SPEED_DISPLAY_SCALE = 6.0f;
@@ -52,13 +52,15 @@ public class ShipHudRenderer {
         final int height = context.getScaledWindowHeight();
 
         // HUD
-        drawVignette(context, width, height);                 // Esquinas arriba y abajo
-        drawBrandingACM(context);                              // Placa ACM
-        drawCrosshair(context, width, height, client.player.getPitch()); // Ladder con números a ambos lados
-        drawHealthIndicatorMicro(context, width, height, ship);          // Indicador más pequeño + shimmer
-        drawSpeedReadout(context, width, height, ship);       // Solo velocidad (sin yaw)
-        drawSystemsPanel(context, width, height);             // Animaciones de "sistemas"
+        drawVignette(context, width, height);
+        drawBrandingACM(context);
+        drawCrosshair(context, width, height, client.player.getPitch());
+        drawHealthIndicatorMicro(context, width, height, ship);
+        drawSpeedReadout(context, width, height, ship);
+        drawSystemsPanel(context, width, height);
         drawDamageFlash(context, width, height);
+        // Añado el nuevo panel de armamento.
+        drawArmamentPanel(context, height, ship);
 
         RenderSystem.disableBlend();
     }
@@ -190,7 +192,7 @@ public class ShipHudRenderer {
         int sx1 = Math.min(x + healthBarWidth, sx0 + sweepWidth);
         if (sx1 > sx0) {
             context.fill(sx0, y, sx1, y + barHeight, 0x40FFFFFF); // brillo suave
-            context.fill(sx0, y, sx1, y + 1, 0x80FFFFFF);         // línea superior
+            context.fill(sx0, y, sx1, y + 1, 0x80FFFFFF);       // línea superior
         }
 
         // Micro-ticks cada 10% (sutiles)
@@ -223,6 +225,62 @@ public class ShipHudRenderer {
         String speedText = String.format("VEL: %.0f m/s", simMS);
         context.drawTextWithShadow(tr, speedText, 15, height - 35, COLOR_WHITE);
     }
+
+    // Panel de munición y recarga, ahora con más detalle visual
+    private static void drawArmamentPanel(DrawContext context, int height, NebulaEntity ship) {
+        final var tr = MinecraftClient.getInstance().textRenderer;
+
+        // Mantengo el tamaño del panel, pero lo reestructuro para mayor claridad.
+        int panelW = 90, panelH = 32;
+        int x = 10;
+        int y = height - panelH - 45; // Lo posiciono arriba del indicador de velocidad.
+
+        // Marco y fondo, sin cambios.
+        context.fill(x - 1, y - 1, x + panelW + 1, y + panelH + 1, COLOR_PRIMARY_ACCENT);
+        context.fill(x, y, x + panelW, y + panelH, COLOR_BACKGROUND);
+
+        // Título del panel.
+        context.drawText(tr, "ARMAMENTO", x + 6, y + 4, COLOR_WHITE, true);
+
+        // Ancho útil para las barras internas.
+        final int innerWidth = panelW - 12;
+        final int barY = y + 25; // Posición Y para las barras de progreso.
+
+        if (ship.isReloading()) {
+            // --- ESTADO DE RECARGA ---
+            // Asumo que la recarga dura 5 segundos (100 ticks).
+            // Esto debería venir de una constante en la entidad, ej: NebulaEntity.RELOAD_DURATION_SECONDS
+            final float totalReloadSeconds = 5.0f;
+            float remainingSeconds = (1.0f - ship.getReloadProgress()) * totalReloadSeconds;
+
+            // Muestro el estado y el tiempo restante.
+            String timeText = String.format("%.1fs", remainingSeconds);
+            context.drawText(tr, "RECARGANDO", x + 6, y + 15, COLOR_HEALTH_LOW, true);
+            context.drawText(tr, timeText, x + panelW - tr.getWidth(timeText) - 6, y + 15, COLOR_HEALTH_MID, true);
+
+            // Barra de progreso de recarga.
+            int progressWidth = (int) (innerWidth * ship.getReloadProgress());
+            context.fill(x + 6, barY, x + 6 + innerWidth, barY + 3, 0x40FFFFFF); // fondo de la barra
+            context.fill(x + 6, barY, x + 6 + progressWidth, barY + 3, COLOR_PRIMARY_ACCENT); // progreso
+
+        } else {
+            // --- ESTADO DE MUNICIÓN LISTA ---
+            int currentAmmo = ship.getAmmo();
+            int maxAmmo = ship.getMaxAmmo();
+
+            // Muestro la etiqueta "Balas" y la cantidad numérica.
+            String ammoText = String.format("%d/%d", currentAmmo, maxAmmo);
+            context.drawText(tr, "BALAS", x + 6, y + 15, COLOR_WHITE, true);
+            context.drawText(tr, ammoText, x + panelW - tr.getWidth(ammoText) - 6, y + 15, COLOR_WHITE, true);
+
+            // Barra visual de munición disponible.
+            float ammoRatio = (maxAmmo > 0) ? (float) currentAmmo / maxAmmo : 0f;
+            int ammoBarWidth = (int) (innerWidth * ammoRatio);
+            context.fill(x + 6, barY, x + 6 + innerWidth, barY + 3, 0x40000000); // fondo oscuro
+            context.fill(x + 6, barY, x + 6 + ammoBarWidth, barY + 3, COLOR_HEALTH_HIGH); // munición disponible
+        }
+    }
+
 
     // Panel de “sistemas funcionando”: barras animadas y secuencia de puntos
     private static void drawSystemsPanel(DrawContext context, int width, int height) {
