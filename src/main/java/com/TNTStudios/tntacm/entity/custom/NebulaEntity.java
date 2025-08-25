@@ -2,6 +2,8 @@
 package com.TNTStudios.tntacm.entity.custom;
 
 import com.TNTStudios.tntacm.entity.custom.projectile.BlueLaserProjectileEntity;
+import com.TNTStudios.tntacm.entity.custom.projectile.LaserProjectileEntity;
+import com.TNTStudios.tntacm.entity.custom.projectile.RedLaserProjectileEntity;
 import com.TNTStudios.tntacm.mixin.LivingEntityAccessor;
 import com.TNTStudios.tntacm.networking.ModMessages;
 import com.google.common.collect.ImmutableList;
@@ -57,12 +59,18 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     private static final int MAX_FIRE_COOLDOWN = 2; // Cadencia de disparo
     private static final double PROJECTILE_SPEED = 5.0D;
     private static final int MAX_AMMO = 150; // Tamaño del cargador
-    private static final int RELOAD_TIME = 80; // 3 segundos (60 ticks)
+    private static final int RELOAD_TIME = 80; // 4 segundos (80 ticks)
     private int reloadTimer = 0;
+
+    // ===== Estado de la nave =====
+    private static final int RECOVERY_TIME = 200; // 10 segundos para recuperarse
+    private int recoveryTimer = 0;
 
     // DataTracker para sincronizar con el cliente (HUD)
     private static final TrackedData<Integer> AMMO_COUNT = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.INTEGER);
     private static final TrackedData<Boolean> IS_RELOADING = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
+    // Nuevo: DataTracker para el estado "desactivado"
+    private static final TrackedData<Boolean> IS_DISABLED = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
 
 
     // ===== Límites y velocidades de rotación =====
@@ -88,14 +96,57 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
         // Inicializo los valores para la munición y el estado de recarga.
         this.dataTracker.startTracking(AMMO_COUNT, MAX_AMMO);
         this.dataTracker.startTracking(IS_RELOADING, false);
+        // Inicializo el nuevo estado.
+        this.dataTracker.startTracking(IS_DISABLED, false);
     }
 
-    // ==================== TICK / LÓGICA DE RECARGA ====================
+    // ==================== LÓGICA DE DAÑO ====================
+    @Override
+    public boolean damage(DamageSource source, float amount) {
+        // Si la nave está desactivada, es invulnerable mientras se repara.
+        if (this.isDisabled()) {
+            return false;
+        }
+
+        // Solo permito el daño si la fuente es un láser de los nuestros.
+        Entity sourceEntity = source.getSource();
+        if (!(sourceEntity instanceof RedLaserProjectileEntity || sourceEntity instanceof BlueLaserProjectileEntity)) {
+            return false; // Ignoro cualquier otro tipo de daño.
+        }
+
+        // Si el daño va a "matar" la nave, en lugar de eso la desactivo.
+        if (this.getHealth() - amount <= 1.0f) {
+            this.setHealth(1.0f); // La dejo con 1 de vida.
+            this.setDisabled(true); // Activo el estado "desactivado".
+            this.recoveryTimer = RECOVERY_TIME; // Inicio el temporizador de recuperación.
+            this.setVelocity(Vec3d.ZERO); // Detengo la nave en seco.
+            return true; // Indico que el daño fue procesado.
+        }
+
+        // Si no, aplico el daño normalmente.
+        return super.damage(source, amount);
+    }
+
+
+    // ==================== TICK / LÓGICA DE ESTADO ====================
     @Override
     public void tick() {
         super.tick();
 
         if (!this.getWorld().isClient()) {
+
+            // Si la nave está desactivada, proceso la recuperación.
+            if (this.isDisabled()) {
+                if (this.recoveryTimer > 0) {
+                    this.recoveryTimer--;
+                } else {
+                    // Se acabó el tiempo: la restauro por completo.
+                    this.setHealth(this.getMaxHealth());
+                    this.setDisabled(false);
+                }
+                return; // No hago nada más si está desactivada.
+            }
+
             // Gestiono el cooldown de disparo entre cada proyectil de la ráfaga.
             if (this.fireCooldown > 0) {
                 this.fireCooldown--;
@@ -160,6 +211,16 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     // ==================== MOVIMIENTO ====================
     @Override
     public void travel(Vec3d movementInput) {
+        // Si la nave está desactivada, la detengo y no permito movimiento.
+        if (this.isDisabled()) {
+            this.setVelocity(this.getVelocity().multiply(0.9, 0.9, 0.9)); // Amortiguación rápida
+            if(this.getVelocity().lengthSquared() < 0.01) {
+                this.setVelocity(Vec3d.ZERO);
+            }
+            this.move(MovementType.SELF, this.getVelocity());
+            return;
+        }
+
         if (this.getControllingPassenger() instanceof PlayerEntity pilot) {
             float forwardInput = pilot.forwardSpeed;
             float sidewaysInput = pilot.sidewaysSpeed;
@@ -203,7 +264,8 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
      * @param shootingDir La dirección de disparo, calculada desde la cámara del cliente.
      */
     public void fireProjectile(Vec3d shootingDir) {
-        if (this.getWorld().isClient() || this.fireCooldown > 0 || this.isReloading()) return;
+        // No puedo disparar si estoy recargando o la nave está desactivada.
+        if (this.getWorld().isClient() || this.fireCooldown > 0 || this.isReloading() || this.isDisabled()) return;
 
         Entity pilot = this.getControllingPassenger();
         if (!(pilot instanceof PlayerEntity player)) return;
@@ -247,6 +309,14 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
 
     public void setReloading(boolean reloading) {
         this.dataTracker.set(IS_RELOADING, reloading);
+    }
+
+    public boolean isDisabled() {
+        return this.dataTracker.get(IS_DISABLED);
+    }
+
+    public void setDisabled(boolean disabled) {
+        this.dataTracker.set(IS_DISABLED, disabled);
     }
 
     // Métodos para el HUD
@@ -300,8 +370,11 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     }
 
     // ==================== Sonidos / Comportamiento base ====================
-    @Override public boolean damage(DamageSource source, float amount) { return super.damage(source, amount); } // Habilito el daño
-    @Override public boolean isInvulnerableTo(DamageSource source) { return source.isSourceCreativePlayer(); }
+    // @Override public boolean damage(DamageSource source, float amount) { return super.damage(source, amount); } // Habilito el daño
+    @Override public boolean isInvulnerableTo(DamageSource source) {
+        // Hago que siga siendo invulnerable al modo creativo, además de mi lógica personalizada.
+        return super.isInvulnerableTo(source) || source.isSourceCreativePlayer();
+    }
     @Override public boolean isPushable() { return false; }
     @Override public void fall(double height, boolean onGround, BlockState state, BlockPos pos) { }
     @Override protected void playStepSound(BlockPos pos, BlockState state) { }

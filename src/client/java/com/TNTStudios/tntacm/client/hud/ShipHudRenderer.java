@@ -61,6 +61,9 @@ public class ShipHudRenderer {
         drawDamageFlash(context, width, height);
         // Añado el nuevo panel de armamento.
         drawArmamentPanel(context, height, ship);
+        // Nuevo: renderizo la alerta de nave desactivada.
+        drawDisabledOverlay(context, width, height, ship);
+
 
         RenderSystem.disableBlend();
     }
@@ -161,7 +164,7 @@ public class ShipHudRenderer {
         context.getMatrices().pop();
     }
 
-    // Indicador de estructura aún más pequeño, con shimmer y microticks
+    // Indicador de estructura ahora llamado "CASCO"
     private static void drawHealthIndicatorMicro(DrawContext context, int width, int height, NebulaEntity ship) {
         final var tr = MinecraftClient.getInstance().textRenderer;
 
@@ -172,7 +175,7 @@ public class ShipHudRenderer {
         final int y = height - 26;
 
         // Título compacto
-        context.drawTextWithShadow(tr, "ESTRUCTURA", x, y - 10, COLOR_WHITE);
+        context.drawTextWithShadow(tr, "CASCO", x, y - 10, COLOR_WHITE);
 
         // Borde fino
         context.fill(x - 1, y - 1, x + barWidth + 1, y + barHeight + 1, COLOR_PRIMARY_ACCENT);
@@ -202,7 +205,7 @@ public class ShipHudRenderer {
         }
 
         // Pulso si la vida es crítica (<25%)
-        if (displayedHealthPercent < 0.25f) {
+        if (displayedHealthPercent < 0.25f && !ship.isDisabled()) {
             float pulse = 0.5f + 0.5f * (float)Math.sin((System.currentTimeMillis() % 600L) / 600f * (float)(2 * Math.PI));
             int alpha = (int)(80 * pulse) << 24;
             context.fill(x - 2, y - 2, x + barWidth + 2, y + barHeight + 2, alpha | (COLOR_HEALTH_LOW & 0x00FFFFFF));
@@ -248,9 +251,8 @@ public class ShipHudRenderer {
 
         if (ship.isReloading()) {
             // --- ESTADO DE RECARGA ---
-            // Asumo que la recarga dura 5 segundos (100 ticks).
-            // Esto debería venir de una constante en la entidad, ej: NebulaEntity.RELOAD_DURATION_SECONDS
-            final float totalReloadSeconds = 5.0f;
+            // Asumo que la recarga dura 4 segundos (80 ticks).
+            final float totalReloadSeconds = 4.0f;
             float remainingSeconds = (1.0f - ship.getReloadProgress()) * totalReloadSeconds;
 
             // Muestro el estado y el tiempo restante.
@@ -336,6 +338,27 @@ public class ShipHudRenderer {
             context.fill(0, 0, width, height, alphaBits | (COLOR_RED_FLASH & 0x00FFFFFF));
         }
     }
+
+    /**
+     * Nuevo: Dibuja una viñeta roja parpadeante cuando la nave está desactivada.
+     */
+    private static void drawDisabledOverlay(DrawContext context, int width, int height, NebulaEntity ship) {
+        if (ship.isDisabled()) {
+            // Creo un parpadeo usando una onda sinusoidal para el alfa.
+            float pulse = 0.6f + 0.4f * (float)Math.sin((System.currentTimeMillis() % 1000L) / 1000f * (float)(2 * Math.PI));
+            int alpha = (int)(100 * pulse) << 24; // Intensidad máxima de ~40%
+            int color = alpha | (COLOR_RED_FLASH & 0x00FFFFFF);
+            context.fill(0, 0, width, height, color);
+
+            // Mensaje de alerta en el centro de la pantalla.
+            final var tr = MinecraftClient.getInstance().textRenderer;
+            String warningMsg = "DAÑO CRÍTICO - SISTEMAS EN RECUPERACIÓN";
+            int textX = (width - tr.getWidth(warningMsg)) / 2;
+            int textY = height / 2 + 40;
+            context.drawTextWithShadow(tr, warningMsg, textX, textY, COLOR_HEALTH_LOW);
+        }
+    }
+
     //endregion
 
     //region Helpers
