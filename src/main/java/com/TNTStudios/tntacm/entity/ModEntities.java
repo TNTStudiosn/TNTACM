@@ -3,6 +3,8 @@ package com.TNTStudios.tntacm.entity;
 
 import com.TNTStudios.tntacm.Tntacm;
 import com.TNTStudios.tntacm.entity.custom.NebulaEntity;
+import com.TNTStudios.tntacm.entity.custom.projectile.BlueLaserProjectileEntity;
+import com.TNTStudios.tntacm.entity.custom.projectile.RedLaserProjectileEntity;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricEntityTypeBuilder;
 import net.minecraft.entity.EntityDimensions;
 import net.minecraft.entity.EntityType;
@@ -23,7 +25,27 @@ public class ModEntities {
                     .build()
     );
 
-    // 2. Método de registro que llamaré desde la clase principal.
+    // 2. Definimos los proyectiles
+    public static final EntityType<BlueLaserProjectileEntity> BLUE_LASER_PROJECTILE = Registry.register(
+            Registries.ENTITY_TYPE,
+            new Identifier(Tntacm.MOD_ID, "blue_laser"),
+            FabricEntityTypeBuilder.<BlueLaserProjectileEntity>create(SpawnGroup.MISC, BlueLaserProjectileEntity::new)
+                    .dimensions(EntityDimensions.fixed(0.25f, 0.25f))
+                    .trackRangeBlocks(128).trackedUpdateRate(10) // Asegura que se vea bien a distancia y velocidad
+                    .build()
+    );
+
+    public static final EntityType<RedLaserProjectileEntity> RED_LASER_PROJECTILE = Registry.register(
+            Registries.ENTITY_TYPE,
+            new Identifier(Tntacm.MOD_ID, "red_laser"),
+            FabricEntityTypeBuilder.<RedLaserProjectileEntity>create(SpawnGroup.MISC, RedLaserProjectileEntity::new)
+                    .dimensions(EntityDimensions.fixed(0.25f, 0.25f))
+                    .trackRangeBlocks(128).trackedUpdateRate(10)
+                    .build()
+    );
+
+
+    // 3. Método de registro que llamaré desde la clase principal.
     public static void registerModEntities() {
         Tntacm.LOGGER.info("Registrando Entidades para " + Tntacm.MOD_ID);
     }

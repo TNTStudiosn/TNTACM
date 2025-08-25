@@ -1,5 +1,8 @@
+// src/main/java/com/TNTStudios/tntacm/entity/custom/NebulaEntity.java
 package com.TNTStudios.tntacm.entity.custom;
 
+import com.TNTStudios.tntacm.entity.ModEntities;
+import com.TNTStudios.tntacm.entity.custom.projectile.BlueLaserProjectileEntity;
 import com.TNTStudios.tntacm.mixin.LivingEntityAccessor;
 import com.TNTStudios.tntacm.networking.ModMessages;
 import com.google.common.collect.ImmutableList;
@@ -41,11 +44,17 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     private static final float ENTITY_HEIGHT = 2.5f;
 
     // ===== Modelo de vuelo (thrusts y damping) =====
-    private static final double FORWARD_THRUST   = 0.08D;   // empuje W/S
-    private static final double STRAFE_THRUST    = 0.06D;   // empuje A/D (sin girar la nave)
-    private static final double VERTICAL_THRUST  = 0.07D;   // empuje vertical (Espacio/Shift)
-    private static final double MAX_SPEED        = 1.8D;    // límite de velocidad lineal
-    private static final double DAMPENING_FACTOR = 0.975D;  // amortiguación inercial
+    private static final double FORWARD_THRUST   = 0.08D;    // empuje W/S
+    private static final double STRAFE_THRUST    = 0.06D;    // empuje A/D (sin girar la nave)
+    private static final double VERTICAL_THRUST  = 0.07D;    // empuje vertical (Espacio/Shift)
+    private static final double MAX_SPEED        = 1.8D;     // límite de velocidad lineal
+    private static final double DAMPENING_FACTOR = 0.975D;   // amortiguación inercial
+
+    // ===== Armamento =====
+    private int fireCooldown = 0;
+    private static final int MAX_FIRE_COOLDOWN = 1; // 20 disparos por segundo. ¡Casi instantáneo!
+    private static final double PROJECTILE_SPEED = 5.0D; // Mayor velocidad del proyectil
+    private static final double PROJECTILE_SPAWN_OFFSET = 5.0D; // Distancia desde el centro de la nave
 
     // ===== Límites y velocidades de rotación =====
     // Pitch limitado para no romper cámara y UI
@@ -85,6 +94,13 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     @Override
     public void tick() {
         super.tick();
+
+        // Actualizar cooldown de disparo en el servidor
+        if (!this.getWorld().isClient()) {
+            if (this.fireCooldown > 0) {
+                this.fireCooldown--;
+            }
+        }
 
         if (this.getControllingPassenger() instanceof PlayerEntity pilot) {
             // 1:1 — la nave copia la cámara en el mismo tick
@@ -151,10 +167,10 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
             float forwardInput  = pilot.forwardSpeed;   // W/S
             float sidewaysInput = pilot.sidewaysSpeed;  // A/D
             boolean ascend  = ((LivingEntityAccessor) pilot).isJumpingInput(); // Espacio
-            boolean descend = pilot.isSneaking();                              // Shift
+            boolean descend = pilot.isSneaking();                             // Shift
 
             // Dirección hacia donde apunta la nave (influida por la cámara)
-            Vec3d forwardDir = this.getRotationVector();   // incluye pitch -> W sube si apunto arriba
+            Vec3d forwardDir = this.getRotationVector();      // incluye pitch -> W sube si apunto arriba
             Vec3d upDir      = new Vec3d(0, 1, 0);
             Vec3d sideDir    = forwardDir.crossProduct(upDir).normalize(); // horizontal, ortogonal a forward
 
@@ -186,6 +202,34 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
             return;
         }
         super.travel(movementInput);
+    }
+
+    // ==================== ARMAMENTO ====================
+    public void fireProjectile() {
+        if (this.getWorld().isClient() || this.fireCooldown > 0) return;
+
+        // --- CAMBIO: Lógica de disparo desde la nave ---
+        // Se revierte a la lógica original para disparar desde la punta de la nave, no desde el jugador.
+        Entity pilot = this.getControllingPassenger();
+        if (pilot == null) return;
+
+        this.fireCooldown = MAX_FIRE_COOLDOWN;
+        World world = this.getWorld();
+
+        Vec3d forwardVec = this.getRotationVector(); // Usamos la dirección de la nave
+        // El proyectil nace en frente del modelo de la nave
+        Vec3d spawnPos = this.getPos()
+                .add(forwardVec.multiply(PROJECTILE_SPAWN_OFFSET))
+                .add(0, this.getMountedHeightOffset(), 0);
+
+        BlueLaserProjectileEntity projectile = new BlueLaserProjectileEntity(world, spawnPos.x, spawnPos.y, spawnPos.z);
+        projectile.setOwner(pilot);
+
+        // La velocidad del proyectil es la dirección de la nave + la inercia actual de la nave.
+        Vec3d projectileVelocity = forwardVec.multiply(PROJECTILE_SPEED).add(this.getVelocity());
+        projectile.setVelocity(projectileVelocity);
+
+        world.spawnEntity(projectile);
     }
 
     // ==================== INTERACCIÓN / PASAJEROS ====================
