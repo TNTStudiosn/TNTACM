@@ -13,10 +13,19 @@ import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.minecraft.client.option.Perspective;
+import net.minecraft.client.render.Camera;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
 
 public class TntacmClient implements ClientModInitializer {
 
     private int clientFireCooldown = 0;
+    // PERF: Cooldown idéntico al del servidor para predicción del cliente.
+    private static final int MAX_FIRE_COOLDOWN = 1;
+    // FIX: La constante fue eliminada en 1.20.1, así que la defino aquí para mantener el código limpio.
+    private static final float DEGREES_TO_RADIANS = (float) (Math.PI / 180.0);
+
 
     @Override
     public void onInitializeClient() {
@@ -53,7 +62,7 @@ public class TntacmClient implements ClientModInitializer {
     //region Input Handling
     private void registerInputHandlers() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.player == null || !ShipViewController.isInShipView) {
+            if (client.player == null || !ShipViewController.isInShipView || client.gameRenderer == null) {
                 return;
             }
 
@@ -62,11 +71,39 @@ public class TntacmClient implements ClientModInitializer {
             }
 
             if (client.options.attackKey.isPressed() && this.clientFireCooldown <= 0) {
-                ClientPlayNetworking.send(ModMessages.FIRE_PROJECTILE_ID, PacketByteBufs.empty());
-                // --- CAMBIO: Sincronizar cooldown con el servidor ---
-                this.clientFireCooldown = 1; // Debe ser idéntico al MAX_FIRE_COOLDOWN del servidor
+                this.clientFireCooldown = MAX_FIRE_COOLDOWN;
+
+                //region Packet
+                Camera camera = client.gameRenderer.getCamera();
+                // FIX: Llamar a nuestro propio método helper para evitar el problema de acceso `protected`.
+                Vec3d cameraDir = getRotationVectorFromAngles(camera.getPitch(), camera.getYaw());
+
+                PacketByteBuf buf = PacketByteBufs.create();
+                buf.writeDouble(cameraDir.x);
+                buf.writeDouble(cameraDir.y);
+                buf.writeDouble(cameraDir.z);
+
+                ClientPlayNetworking.send(ModMessages.FIRE_PROJECTILE_ID, buf);
+                //endregion
             }
         });
     }
     //endregion
+
+    /**
+     * Calcula el vector de dirección a partir de los ángulos de pitch y yaw.
+     * Es una réplica del método `protected` de la clase `Entity` para poder usarlo aquí.
+     */
+    private static Vec3d getRotationVectorFromAngles(float pitch, float yaw) {
+        // FIX: Reemplazo la constante `MathHelper.DEGREES_TO_RADIANS` que ya no existe en 1.20.1.
+        float pitchRad = pitch * DEGREES_TO_RADIANS;
+        float yawRad = -yaw * DEGREES_TO_RADIANS;
+
+        float cosYaw = MathHelper.cos(yawRad);
+        float sinYaw = MathHelper.sin(yawRad);
+        float cosPitch = MathHelper.cos(pitchRad);
+        float sinPitch = MathHelper.sin(pitchRad);
+
+        return new Vec3d(sinYaw * cosPitch, -sinPitch, cosYaw * cosPitch);
+    }
 }

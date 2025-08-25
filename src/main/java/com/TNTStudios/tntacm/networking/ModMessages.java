@@ -5,6 +5,7 @@ import com.TNTStudios.tntacm.Tntacm;
 import com.TNTStudios.tntacm.entity.custom.NebulaEntity;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.Vec3d;
 
 public class ModMessages {
 
@@ -19,13 +20,16 @@ public class ModMessages {
 
 
     //region Registration
-    // C2S packets would be registered here
     public static void registerC2SPackets() {
         ServerPlayNetworking.registerGlobalReceiver(FIRE_PROJECTILE_ID, (server, player, handler, buf, responseSender) -> {
+            // Leemos el vector de dirección enviado por el cliente
+            final Vec3d shootingDir = new Vec3d(buf.readDouble(), buf.readDouble(), buf.readDouble());
+
             server.execute(() -> {
                 // Ejecutamos en el hilo del servidor para seguridad
                 if (player.getVehicle() instanceof NebulaEntity ship) {
-                    ship.fireProjectile();
+                    // Pasamos la dirección de disparo a la nave
+                    ship.fireProjectile(shootingDir);
                 }
             });
         });
