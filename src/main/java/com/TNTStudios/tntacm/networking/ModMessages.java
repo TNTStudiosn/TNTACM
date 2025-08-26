@@ -22,19 +22,17 @@ public class ModMessages {
     //region Registration
     public static void registerC2SPackets() {
         ServerPlayNetworking.registerGlobalReceiver(FIRE_PROJECTILE_ID, (server, player, handler, buf, responseSender) -> {
-            // Leemos el vector de dirección enviado por el cliente
+            // LEO LOS DOS VECTORES DEL BUFFER, EN EL MISMO ORDEN QUE LOS ENVIÉ
+            final Vec3d originPos = new Vec3d(buf.readDouble(), buf.readDouble(), buf.readDouble());
             final Vec3d shootingDir = new Vec3d(buf.readDouble(), buf.readDouble(), buf.readDouble());
 
             server.execute(() -> {
                 // Ejecutamos en el hilo del servidor para seguridad
                 if (player.getVehicle() instanceof NebulaEntity ship) {
-                    // Pasamos la dirección de disparo a la nave
-                    ship.fireProjectile(shootingDir);
+                    // PASO AMBOS VECTORES AL MÉTODO ACTUALIZADO DE LA NAVE
+                    ship.fireProjectile(originPos, shootingDir);
                 }
             });
         });
     }
-
-    // S2C packet handlers are registered on the client side in TntacmClient
-    //endregion
 }

@@ -261,9 +261,10 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     //region Armamento
     /**
      * Dispara un proyectil desde la perspectiva del piloto.
+     * @param originPos La posición de origen del disparo (la cámara del cliente).
      * @param shootingDir La dirección de disparo, calculada desde la cámara del cliente.
      */
-    public void fireProjectile(Vec3d shootingDir) {
+    public void fireProjectile(Vec3d originPos, Vec3d shootingDir) { // <-- CAMBIO EN LA FIRMA
         // No puedo disparar si estoy recargando o la nave está desactivada.
         if (this.getWorld().isClient() || this.fireCooldown > 0 || this.isReloading() || this.isDisabled()) return;
 
@@ -278,8 +279,8 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
 
         World world = this.getWorld();
 
-        Vec3d spawnPos = player.getCameraPosVec(1.0f);
-        BlueLaserProjectileEntity projectile = new BlueLaserProjectileEntity(world, spawnPos.x, spawnPos.y, spawnPos.z);
+        // USO EL 'originPos' RECIBIDO DEL CLIENTE EN LUGAR DE CALCULARLO AQUÍ
+        BlueLaserProjectileEntity projectile = new BlueLaserProjectileEntity(world, originPos.x, originPos.y, originPos.z);
         projectile.setOwner(pilot);
 
         Vec3d projectileVelocity = shootingDir.multiply(PROJECTILE_SPEED).add(this.getVelocity());
@@ -292,7 +293,6 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
             this.reloadTimer = RELOAD_TIME;
         }
     }
-    //endregion
 
     //region Getters y Setters para DataTracker
     public int getAmmo() {

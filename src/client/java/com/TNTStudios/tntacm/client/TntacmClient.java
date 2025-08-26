@@ -68,10 +68,17 @@ public class TntacmClient implements ClientModInitializer {
             if (client.options.attackKey.isPressed()) {
                 //region Packet
                 Camera camera = client.gameRenderer.getCamera();
-                // FIX: Llamar a nuestro propio método helper para evitar el problema de acceso `protected`.
+                // OBTENGO LA POSICIÓN Y DIRECCIÓN DE LA CÁMARA (gracias al mixin, ya están correctas)
+                Vec3d cameraPos = camera.getPos();
                 Vec3d cameraDir = getRotationVectorFromAngles(camera.getPitch(), camera.getYaw());
 
                 PacketByteBuf buf = PacketByteBufs.create();
+                // AHORA ESCRIBO AMBOS VECTORES EN EL PAQUETE
+                // Primero el origen (3 doubles)
+                buf.writeDouble(cameraPos.x);
+                buf.writeDouble(cameraPos.y);
+                buf.writeDouble(cameraPos.z);
+                // Luego la dirección (3 doubles)
                 buf.writeDouble(cameraDir.x);
                 buf.writeDouble(cameraDir.y);
                 buf.writeDouble(cameraDir.z);
