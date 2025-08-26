@@ -48,19 +48,19 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     private static final float ENTITY_HEIGHT = 2.5f;
 
     // ===== Modelo de vuelo (thrusts y damping) =====
-    private static final double FORWARD_THRUST = 0.08D;      // empuje W/S
-    private static final double STRAFE_THRUST = 0.06D;       // empuje A/D (sin girar la nave)
-    private static final double VERTICAL_THRUST = 0.07D;     // empuje vertical (Espacio/Shift)
-    private static final double MAX_SPEED = 1.8D;            // límite de velocidad lineal
-    private static final double DAMPENING_FACTOR = 0.975D;   // amortiguación inercial
+    private static final double FORWARD_THRUST = 0.08D;     // empuje W/S
+    private static final double STRAFE_THRUST = 0.06D;      // empuje A/D (sin girar la nave)
+    private static final double VERTICAL_THRUST = 0.07D;    // empuje vertical (Espacio/Shift)
+    private static final double MAX_SPEED = 1.8D;           // límite de velocidad lineal
+    private static final double DAMPENING_FACTOR = 0.975D;  // amortiguación inercial
 
     // ===== Armamento =====
     private int fireCooldown = 0;
     private static final int MAX_FIRE_COOLDOWN = 2; // Cadencia de disparo
     private static final double PROJECTILE_SPEED = 5.0D;
     private static final int MAX_AMMO = 150; // Tamaño del cargador
-    private static final int RELOAD_TIME = 80; // 4 segundos (80 ticks)
-    private int reloadTimer = 0;
+    // Hago esta constante pública para poder acceder a ella desde el HUD.
+    public static final int RELOAD_TIME = 80; // 4 segundos (80 ticks)
 
     // ===== Estado de la nave =====
     private static final int RECOVERY_TIME = 200; // 10 segundos para recuperarse
@@ -71,6 +71,8 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     private static final TrackedData<Boolean> IS_RELOADING = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
     // Nuevo: DataTracker para el estado "desactivado"
     private static final TrackedData<Boolean> IS_DISABLED = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.BOOLEAN);
+    // FIX: Añado un tracker para el temporizador de recarga, así el cliente conoce el valor real.
+    private static final TrackedData<Integer> RELOAD_TIMER = DataTracker.registerData(NebulaEntity.class, TrackedDataHandlerRegistry.INTEGER);
 
 
     // ===== Límites y velocidades de rotación =====
@@ -98,6 +100,8 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
         this.dataTracker.startTracking(IS_RELOADING, false);
         // Inicializo el nuevo estado.
         this.dataTracker.startTracking(IS_DISABLED, false);
+        // FIX: Inicializo el nuevo tracker del temporizador.
+        this.dataTracker.startTracking(RELOAD_TIMER, 0);
     }
 
     // ==================== LÓGICA DE DAÑO ====================
@@ -154,8 +158,10 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
 
             // Gestiono la lógica de recarga.
             if (this.isReloading()) {
-                if (this.reloadTimer > 0) {
-                    this.reloadTimer--;
+                // FIX: Leo y escribo el valor del temporizador desde el DataTracker.
+                int currentTimer = this.dataTracker.get(RELOAD_TIMER);
+                if (currentTimer > 0) {
+                    this.dataTracker.set(RELOAD_TIMER, currentTimer - 1);
                 } else {
                     // Termina la recarga: reseteo munición y estado.
                     this.setAmmo(MAX_AMMO);
@@ -290,7 +296,8 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
         // Si se acaba la munición, inicio la recarga.
         if (this.getAmmo() <= 0) {
             this.setReloading(true);
-            this.reloadTimer = RELOAD_TIME;
+            // FIX: Establezco el temporizador en el DataTracker para que se sincronice.
+            this.dataTracker.set(RELOAD_TIMER, RELOAD_TIME);
         }
     }
 
@@ -326,7 +333,9 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
 
     public float getReloadProgress() {
         if (!isReloading()) return 0f;
-        return 1.0f - (float)this.reloadTimer / (float)RELOAD_TIME;
+        // FIX: Leo el valor sincronizado del DataTracker en lugar de la variable local.
+        float reloadTimer = this.dataTracker.get(RELOAD_TIMER);
+        return 1.0f - reloadTimer / (float)RELOAD_TIME;
     }
 
     //endregion

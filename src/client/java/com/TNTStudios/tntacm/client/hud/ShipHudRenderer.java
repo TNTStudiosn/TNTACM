@@ -233,8 +233,8 @@ public class ShipHudRenderer {
     private static void drawArmamentPanel(DrawContext context, int height, NebulaEntity ship) {
         final var tr = MinecraftClient.getInstance().textRenderer;
 
-        // Mantengo el tamaño del panel, pero lo reestructuro para mayor claridad.
-        int panelW = 90, panelH = 32;
+        // Aumento el tamaño del panel para un diseño más claro y estilizado.
+        int panelW = 100, panelH = 40;
         int x = 10;
         int y = height - panelH - 45; // Lo posiciono arriba del indicador de velocidad.
 
@@ -242,44 +242,64 @@ public class ShipHudRenderer {
         context.fill(x - 1, y - 1, x + panelW + 1, y + panelH + 1, COLOR_PRIMARY_ACCENT);
         context.fill(x, y, x + panelW, y + panelH, COLOR_BACKGROUND);
 
-        // Título del panel.
-        context.drawText(tr, "ARMAMENTO", x + 6, y + 4, COLOR_WHITE, true);
+        // Título del panel "ARMAMENTO" con una línea divisoria debajo.
+        context.drawTextWithShadow(tr, "ARMAMENTO", x + 6, y + 4, COLOR_WHITE);
+        context.fill(x + 4, y + 14, x + panelW - 4, y + 15, COLOR_SECONDARY_ACCENT);
 
-        // Ancho útil para las barras internas.
+        // Defino el área para la barra de progreso.
+        final int barX = x + 6;
+        final int barY = y + 28;
+        final int barH = 6;
         final int innerWidth = panelW - 12;
-        final int barY = y + 25; // Posición Y para las barras de progreso.
 
         if (ship.isReloading()) {
-            // --- ESTADO DE RECARGA ---
-            // Asumo que la recarga dura 4 segundos (80 ticks).
-            final float totalReloadSeconds = 4.0f;
-            float remainingSeconds = (1.0f - ship.getReloadProgress()) * totalReloadSeconds;
+            // --- ESTADO DE RECARGA MEJORADO ---
+            final float totalReloadSeconds = NebulaEntity.RELOAD_TIME / 20.0f; // Convierto ticks a segundos
+            float reloadProgress = ship.getReloadProgress();
+            // Gracias al DataTracker, el progreso y el tiempo restante ahora son correctos.
+            float remainingSeconds = (1.0f - reloadProgress) * totalReloadSeconds;
 
-            // Muestro el estado y el tiempo restante.
-            String timeText = String.format("%.1fs", remainingSeconds);
-            context.drawText(tr, "RECARGANDO", x + 6, y + 15, COLOR_HEALTH_LOW, true);
-            context.drawText(tr, timeText, x + panelW - tr.getWidth(timeText) - 6, y + 15, COLOR_HEALTH_MID, true);
+            // Etiqueta de estado y contador de tiempo.
+            String statusText = "CARGANDO...";
+            String timeText = String.format("%.1f S", remainingSeconds);
+            context.drawTextWithShadow(tr, statusText, x + 6, y + 18, COLOR_HEALTH_MID);
+            context.drawTextWithShadow(tr, timeText, x + panelW - tr.getWidth(timeText) - 6, y + 18, COLOR_HEALTH_MID);
 
-            // Barra de progreso de recarga.
-            int progressWidth = (int) (innerWidth * ship.getReloadProgress());
-            context.fill(x + 6, barY, x + 6 + innerWidth, barY + 3, 0x40FFFFFF); // fondo de la barra
-            context.fill(x + 6, barY, x + 6 + progressWidth, barY + 3, COLOR_PRIMARY_ACCENT); // progreso
+            // Barra de progreso de recarga con efecto visual.
+            int progressWidth = (int) (innerWidth * reloadProgress);
+            // Fondo de la barra.
+            context.fill(barX, barY, barX + innerWidth, barY + barH, 0x55AAAAAA);
+            // Barra de progreso.
+            context.fill(barX, barY, barX + progressWidth, barY + barH, COLOR_PRIMARY_ACCENT);
+            // Borde brillante en el progreso.
+            context.fill(barX, barY, barX + progressWidth, barY + 1, 0xAAFFFFFF);
 
         } else {
-            // --- ESTADO DE MUNICIÓN LISTA ---
+            // --- ESTADO DE MUNICIÓN MEJORADO ---
             int currentAmmo = ship.getAmmo();
             int maxAmmo = ship.getMaxAmmo();
-
-            // Muestro la etiqueta "Balas" y la cantidad numérica.
-            String ammoText = String.format("%d/%d", currentAmmo, maxAmmo);
-            context.drawText(tr, "BALAS", x + 6, y + 15, COLOR_WHITE, true);
-            context.drawText(tr, ammoText, x + panelW - tr.getWidth(ammoText) - 6, y + 15, COLOR_WHITE, true);
-
-            // Barra visual de munición disponible.
             float ammoRatio = (maxAmmo > 0) ? (float) currentAmmo / maxAmmo : 0f;
+
+            // Etiqueta de estado "LISTO" y contador numérico de munición.
+            String statusText = "LISTO";
+            String ammoText = String.format("%03d", currentAmmo); // Formato con ceros a la izquierda, ej: 025
+
+            context.drawTextWithShadow(tr, statusText, x + 6, y + 18, COLOR_HEALTH_HIGH);
+            context.drawTextWithShadow(tr, ammoText, x + panelW - tr.getWidth(ammoText) - 6, y + 18, COLOR_WHITE);
+
+            // Barra de munición.
             int ammoBarWidth = (int) (innerWidth * ammoRatio);
-            context.fill(x + 6, barY, x + 6 + innerWidth, barY + 3, 0x40000000); // fondo oscuro
-            context.fill(x + 6, barY, x + 6 + ammoBarWidth, barY + 3, COLOR_HEALTH_HIGH); // munición disponible
+            int ammoColor = getAmmoColor(ammoRatio);
+
+            // Fondo de la barra.
+            context.fill(barX, barY, barX + innerWidth, barY + barH, 0x55000000);
+            // Barra de munición.
+            context.fill(barX, barY, barX + ammoBarWidth, barY + barH, ammoColor);
+
+            // Pequeño borde para dar profundidad.
+            if (ammoBarWidth > 0) {
+                context.fill(barX, barY, barX + ammoBarWidth, barY + 1, 0x60FFFFFF);
+            }
         }
     }
 
@@ -365,6 +385,16 @@ public class ShipHudRenderer {
     private static int getHealthColor(float percent) {
         if (percent > 0.66f) return COLOR_HEALTH_HIGH;
         if (percent > 0.33f) return COLOR_HEALTH_MID;
+        return COLOR_HEALTH_LOW;
+    }
+
+    /**
+     * Nuevo helper para colorear la barra de munición según la cantidad restante.
+     * Verde -> Amarillo -> Rojo
+     */
+    private static int getAmmoColor(float percent) {
+        if (percent > 0.5f) return COLOR_HEALTH_HIGH;
+        if (percent > 0.2f) return COLOR_HEALTH_MID;
         return COLOR_HEALTH_LOW;
     }
     //endregion
