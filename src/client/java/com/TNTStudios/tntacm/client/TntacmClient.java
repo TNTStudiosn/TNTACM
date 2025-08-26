@@ -22,7 +22,8 @@ public class TntacmClient implements ClientModInitializer {
 
     // FIX: La constante fue eliminada en 1.20.1, así que la defino aquí para mantener el código limpio.
     private static final float DEGREES_TO_RADIANS = (float) (Math.PI / 180.0);
-
+    // Defino qué tan adelante de la cámara nacerá el proyectil. 1.0 = 1 bloque.
+    private static final double PROJECTILE_SPAWN_OFFSET = 5.0;
 
     @Override
     public void onInitializeClient() {
@@ -63,22 +64,22 @@ public class TntacmClient implements ClientModInitializer {
                 return;
             }
 
-            // Simplifico la lógica: el cliente solo envía la intención de disparar.
-            // El servidor validará la munición y el cooldown.
             if (client.options.attackKey.isPressed()) {
                 //region Packet
                 Camera camera = client.gameRenderer.getCamera();
-                // OBTENGO LA POSICIÓN Y DIRECCIÓN DE LA CÁMARA (gracias al mixin, ya están correctas)
                 Vec3d cameraPos = camera.getPos();
                 Vec3d cameraDir = getRotationVectorFromAngles(camera.getPitch(), camera.getYaw());
 
+                // Calculo el punto de origen adelantado, usando la posición y dirección de la cámara.
+                Vec3d spawnOrigin = cameraPos.add(cameraDir.multiply(PROJECTILE_SPAWN_OFFSET));
+
                 PacketByteBuf buf = PacketByteBufs.create();
-                // AHORA ESCRIBO AMBOS VECTORES EN EL PAQUETE
-                // Primero el origen (3 doubles)
-                buf.writeDouble(cameraPos.x);
-                buf.writeDouble(cameraPos.y);
-                buf.writeDouble(cameraPos.z);
-                // Luego la dirección (3 doubles)
+
+                // Uso el nuevo origen adelantado para el paquete.
+                buf.writeDouble(spawnOrigin.x);
+                buf.writeDouble(spawnOrigin.y);
+                buf.writeDouble(spawnOrigin.z);
+
                 buf.writeDouble(cameraDir.x);
                 buf.writeDouble(cameraDir.y);
                 buf.writeDouble(cameraDir.z);
