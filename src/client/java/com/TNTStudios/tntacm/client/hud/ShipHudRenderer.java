@@ -374,7 +374,7 @@ public class ShipHudRenderer {
             final var tr = MinecraftClient.getInstance().textRenderer;
             String warningMsg = "DAÑO CRÍTICO - SISTEMAS EN RECUPERACIÓN";
             int textX = (width - tr.getWidth(warningMsg)) / 2;
-            int textY = height / 2 + 60;
+            int textY = height / 2 + 70;
             context.drawTextWithShadow(tr, warningMsg, textX, textY, COLOR_HEALTH_LOW);
         }
     }

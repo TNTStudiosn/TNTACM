@@ -3,6 +3,7 @@ package com.TNTStudios.tntacm.entity.custom.projectile;
 
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.player.PlayerEntity; // <-- Añado la importación que necesito.
 import net.minecraft.entity.projectile.ProjectileEntity;
 import net.minecraft.entity.projectile.ProjectileUtil;
 import net.minecraft.nbt.NbtCompound;
@@ -77,6 +78,13 @@ public abstract class LaserProjectileEntity extends ProjectileEntity {
 
         Entity target = entityHitResult.getEntity();
         Entity owner  = this.getOwner();
+
+        // FIX: Añado una comprobación para que el proyectil ignore a los jugadores.
+        // Si la entidad golpeada es un jugador, simplemente descarto el proyectil sin hacer daño.
+        if (target instanceof PlayerEntity) {
+            this.discard();
+            return;
+        }
 
         // Seguridad extra (debería quedar cubierta por canHit, pero prefiero doble chequeo)
         if (owner != null && (target == owner || target == owner.getVehicle())) {

@@ -146,6 +146,14 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     public void tick() {
         super.tick();
 
+        // FIX: El BoundingBox de una entidad no se actualiza solo.
+        // Debo recalcularlo y establecerlo manualmente en cada tick para que la colisión
+        // coincida con la rotación visual de la nave. Sin esto, el servidor usa
+        // una caja de colisión estática que no gira, causando que los disparos fallen.
+        if (!this.isRemoved()) {
+            this.setBoundingBox(this.calculateBoundingBox());
+        }
+
         if (!this.getWorld().isClient()) {
 
             // Si la nave está desactivada, proceso la recuperación.

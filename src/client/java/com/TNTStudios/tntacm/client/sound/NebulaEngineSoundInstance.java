@@ -3,10 +3,10 @@ package com.TNTStudios.tntacm.client.sound;
 
 import com.TNTStudios.tntacm.entity.custom.NebulaEntity;
 import com.TNTStudios.tntacm.sound.ModSounds;
-import net.minecraft.client.MinecraftClient; // <-- AÑADIDO
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.sound.MovingSoundInstance;
 import net.minecraft.client.sound.SoundInstance;
-import net.minecraft.entity.player.PlayerEntity; // <-- AÑADIDO
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.sound.SoundCategory;
 import net.minecraft.util.math.MathHelper;
 
@@ -20,7 +20,10 @@ public class NebulaEngineSoundInstance extends MovingSoundInstance {
         this.nebula = nebula;
         this.repeat = true;
         this.repeatDelay = 0;
-        this.volume = 0.0F; // Empieza en silencio, como querías.
+        // FIX: Empiezo con un volumen minúsculo en lugar de 0.0F.
+        // Esto asegura que el SoundManager procese el sonido y llame a tick(),
+        // permitiendo que el volumen aumente dinámicamente como queremos.
+        this.volume = 0.001F;
         // La posición del sonido es la de la nave.
         this.x = (float)nebula.getX();
         this.y = (float)nebula.getY();
