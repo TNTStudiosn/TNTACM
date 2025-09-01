@@ -2,5 +2,9 @@
   "block.tntacm.universo": "Universo",
   "itemgroup.tntacm": "ACM",
   "biome.tntacm.space_biome": "Deep Space",
-  "entity.tntacm.nebula": "Nebula (Nave de caza ACM)"
+  "entity.tntacm.nebula": "Nebula (Nave de caza ACM)",
+  "subtitles.tntacm.entity.nebula.laser": "Nebula fires laser",
+  "subtitles.tntacm.entity.nebula.reload": "Nebula reloading",
+  "subtitles.tntacm.entity.nebula.disabled": "Nebula systems failing",
+  "subtitles.tntacm.entity.nebula.engine": "Nebula engine hums"
 }

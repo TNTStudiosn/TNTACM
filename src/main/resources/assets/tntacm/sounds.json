@@ -1,0 +1,26 @@
+{
+  "entity.nebula.laser": {
+    "subtitle": "subtitles.tntacm.entity.nebula.laser",
+    "sounds": [
+      "tntacm:entity/nebula/lase"
+    ]
+  },
+  "entity.nebula.reload": {
+    "subtitle": "subtitles.tntacm.entity.nebula.reload",
+    "sounds": [
+      "tntacm:entity/nebula/sinbalas"
+    ]
+  },
+  "entity.nebula.disabled": {
+    "subtitle": "subtitles.tntacm.entity.nebula.disabled",
+    "sounds": [
+      "tntacm:entity/nebula/falla"
+    ]
+  },
+  "entity.nebula.engine": {
+    "subtitle": "subtitles.tntacm.entity.nebula.engine",
+    "sounds": [
+      "tntacm:entity/nebula/motor"
+    ]
+  }
+}

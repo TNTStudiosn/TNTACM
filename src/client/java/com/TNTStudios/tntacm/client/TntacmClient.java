@@ -3,6 +3,7 @@ package com.TNTStudios.tntacm.client;
 
 import com.TNTStudios.tntacm.client.entity.NebulaRenderer;
 import com.TNTStudios.tntacm.client.entity.projectile.LaserProjectileRenderer;
+import com.TNTStudios.tntacm.client.sound.NebulaEngineSoundInstance;
 import com.TNTStudios.tntacm.entity.ModEntities;
 import com.TNTStudios.tntacm.entity.custom.NebulaEntity;
 import com.TNTStudios.tntacm.networking.ModMessages;
@@ -14,9 +15,11 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.minecraft.client.option.Perspective;
 import net.minecraft.client.render.Camera;
+import net.minecraft.client.sound.SoundInstance;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import org.jetbrains.annotations.Nullable;
 
 public class TntacmClient implements ClientModInitializer {
 
@@ -24,6 +27,11 @@ public class TntacmClient implements ClientModInitializer {
     private static final float DEGREES_TO_RADIANS = (float) (Math.PI / 180.0);
     // Defino qué tan adelante de la cámara nacerá el proyectil. 1.0 = 1 bloque.
     private static final double PROJECTILE_SPAWN_OFFSET = 5.0;
+
+    // Necesito una referencia a la instancia del sonido del motor para poder detenerla.
+    @Nullable
+    private static SoundInstance engineSoundInstance;
+
 
     @Override
     public void onInitializeClient() {
@@ -46,12 +54,31 @@ public class TntacmClient implements ClientModInitializer {
             client.execute(() -> {
                 ShipViewController.isInShipView = true;
                 client.options.setPerspective(Perspective.FIRST_PERSON);
+
+                // --- INICIO SONIDO DE MOTOR ('motor.ogg') ---
+                // Me aseguro de que el jugador esté montado en una Nébula
+                if (client.player != null && client.player.getVehicle() instanceof NebulaEntity nebula) {
+                    // Si ya hay un sonido sonando (por si acaso), lo detengo.
+                    if (engineSoundInstance != null) {
+                        client.getSoundManager().stop(engineSoundInstance);
+                    }
+                    // Creo y reproduzco la nueva instancia del sonido.
+                    engineSoundInstance = new NebulaEngineSoundInstance(nebula);
+                    client.getSoundManager().play(engineSoundInstance);
+                }
             });
         });
 
         ClientPlayNetworking.registerGlobalReceiver(ModMessages.EXIT_SHIP_VIEW_ID, (client, handler, buf, responseSender) -> {
             client.execute(() -> {
                 ShipViewController.isInShipView = false;
+
+                // --- DETENGO SONIDO DE MOTOR ---
+                // Si existe una instancia del sonido, le digo al SoundManager que la detenga.
+                if (engineSoundInstance != null) {
+                    client.getSoundManager().stop(engineSoundInstance);
+                    engineSoundInstance = null; // Limpio la referencia.
+                }
             });
         });
     }

@@ -6,6 +6,7 @@ import com.TNTStudios.tntacm.entity.custom.projectile.LaserProjectileEntity;
 import com.TNTStudios.tntacm.entity.custom.projectile.RedLaserProjectileEntity;
 import com.TNTStudios.tntacm.mixin.LivingEntityAccessor;
 import com.TNTStudios.tntacm.networking.ModMessages;
+import com.TNTStudios.tntacm.sound.ModSounds; // Importamos nuestros sonidos
 import com.google.common.collect.ImmutableList;
 import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
@@ -20,6 +21,7 @@ import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.sound.SoundCategory; // Importamos la categoría de sonido
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Arm;
 import net.minecraft.util.Hand;
@@ -48,11 +50,11 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     private static final float ENTITY_HEIGHT = 2.5f;
 
     // ===== Modelo de vuelo (thrusts y damping) =====
-    private static final double FORWARD_THRUST = 0.08D;     // empuje W/S
-    private static final double STRAFE_THRUST = 0.06D;      // empuje A/D (sin girar la nave)
-    private static final double VERTICAL_THRUST = 0.07D;    // empuje vertical (Espacio/Shift)
-    private static final double MAX_SPEED = 1.8D;           // límite de velocidad lineal
-    private static final double DAMPENING_FACTOR = 0.975D;  // amortiguación inercial
+    private static final double FORWARD_THRUST = 0.08D;      // empuje W/S
+    private static final double STRAFE_THRUST = 0.06D;       // empuje A/D (sin girar la nave)
+    private static final double VERTICAL_THRUST = 0.07D;     // empuje vertical (Espacio/Shift)
+    private static final double MAX_SPEED = 1.8D;            // límite de velocidad lineal
+    private static final double DAMPENING_FACTOR = 0.975D;   // amortiguación inercial
 
     // ===== Armamento =====
     private int fireCooldown = 0;
@@ -124,6 +126,13 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
             this.setDisabled(true); // Activo el estado "desactivado".
             this.recoveryTimer = RECOVERY_TIME; // Inicio el temporizador de recuperación.
             this.setVelocity(Vec3d.ZERO); // Detengo la nave en seco.
+
+            // === SONIDO DE FALLA CRÍTICA ('falla.ogg') ===
+            // Lo reproduzco en el servidor para que todos lo escuchen.
+            if (!this.getWorld().isClient()) {
+                this.getWorld().playSound(null, this.getBlockPos(), ModSounds.ENTITY_NEBULA_DISABLED, SoundCategory.NEUTRAL, 0.8f, 1.0f);
+            }
+
             return true; // Indico que el daño fue procesado.
         }
 
@@ -285,6 +294,9 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
 
         World world = this.getWorld();
 
+        // === SONIDO DE LÁSER ('lase.ogg') ===
+        world.playSound(null, this.getBlockPos(), ModSounds.ENTITY_NEBULA_LASER, SoundCategory.PLAYERS, 0.6f, 1.0f);
+
         // USO EL 'originPos' RECIBIDO DEL CLIENTE EN LUGAR DE CALCULARLO AQUÍ
         BlueLaserProjectileEntity projectile = new BlueLaserProjectileEntity(world, originPos.x, originPos.y, originPos.z);
         projectile.setOwner(pilot);
@@ -298,6 +310,8 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
             this.setReloading(true);
             // FIX: Establezco el temporizador en el DataTracker para que se sincronice.
             this.dataTracker.set(RELOAD_TIMER, RELOAD_TIME);
+            // === SONIDO DE RECARGA ('sinbalas.ogg') ===
+            world.playSound(null, this.getBlockPos(), ModSounds.ENTITY_NEBULA_RELOAD, SoundCategory.PLAYERS, 0.8f, 1.0f);
         }
     }
 
@@ -379,9 +393,7 @@ public class NebulaEntity extends LivingEntity implements GeoEntity {
     }
 
     // ==================== Sonidos / Comportamiento base ====================
-    // @Override public boolean damage(DamageSource source, float amount) { return super.damage(source, amount); } // Habilito el daño
     @Override public boolean isInvulnerableTo(DamageSource source) {
-        // Hago que siga siendo invulnerable al modo creativo, además de mi lógica personalizada.
         return super.isInvulnerableTo(source) || source.isSourceCreativePlayer();
     }
     @Override public boolean isPushable() { return false; }
